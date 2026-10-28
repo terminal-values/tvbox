@@ -24,7 +24,7 @@ die() { code=$1; shift; printf '%s\n' "$*" >&2; exit "$code"; }
 
 # --- the runtime -----------------------------------------------------------
 
-find_runtime() {
+detect_runtime() {
     RT=${TV_RUNTIME:-$RUNTIME}
     if [ -n "$RT" ] && command -v "$RT" >/dev/null 2>&1; then :; else
         RT=
@@ -32,6 +32,10 @@ find_runtime() {
             if command -v "$r" >/dev/null 2>&1; then RT=$r; break; fi
         done
     fi
+}
+
+find_runtime() {
+    detect_runtime
     [ -n "$RT" ] || die 4 "No container runtime found. Install one first: on a Mac,
 Apple's container (https://github.com/apple/container/releases); on Linux,
 sudo apt install podman."
@@ -196,6 +200,39 @@ tv export-key > somewhere-safe/tv-age-key.txt"
     in_box cat /state/home/.passage/identities
 }
 
+cmd_uninstall() {
+    keep=ask
+    [ "${1:-}" = --yes-keep-state ] && keep=yes
+    detect_runtime
+    if [ -n "$RT" ]; then
+        "$RT" stop "$BOX" >/dev/null 2>&1
+        "$RT" rm "$BOX" >/dev/null 2>&1
+        "$RT" image rm "$IMAGE" >/dev/null 2>&1
+        say "Removed the box and its image."
+        if [ "$keep" = ask ]; then
+            say "The box's storage, $VOLUME, holds your age key, TV's secrets, and the box's"
+            say "Tailscale and Syncthing settings. If you haven't saved your age key"
+            say "elsewhere, answer n and run tv export-key first."
+            printf 'Delete %s too? [y/N] ' "$VOLUME"
+            read -r answer || answer=
+            case $answer in
+                [yY]*) "$RT" volume rm "$VOLUME" >/dev/null && say "Deleted $VOLUME." ;;
+                *) say "Kept $VOLUME." ;;
+            esac
+        fi
+    fi
+    for rc in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.profile"; do
+        if [ -f "$rc" ] && grep -qF "# added by the tvbox installer" "$rc"; then
+            grep -vF "# added by the tvbox installer" "$rc" > "$rc.tvbox-tmp"
+            mv -f "$rc.tvbox-tmp" "$rc"
+            say "Took the PATH line out of $rc."
+        fi
+    done
+    rm -rf "$HOME/Applications/Terminal Values.app"
+    rm -f "$CONFIG" "$HOME/.local/bin/tv"
+    say "tv is uninstalled.${FOLDER:+ The TV folder, $FOLDER, is still there.}"
+}
+
 usage() {
     cat <<'EOF'
 tv: Terminal Values' box.
@@ -213,6 +250,7 @@ tv: Terminal Values' box.
   tv import-key  bring in your saved age key (tv import-key < file)
   tv export-key  save a copy of your age key (tv export-key > file)
   tv update      get a newer box, showing what changed first
+  tv folder      print where the TV folder is
   tv uninstall   remove the box and tv
 EOF
 }
@@ -231,6 +269,8 @@ case $cmd in
     pages) cmd_pages ;;
     import-key) cmd_import_key ;;
     export-key) cmd_export_key ;;
+    folder) need_config; say "$FOLDER" ;;
+    uninstall) cmd_uninstall "$@" ;;
     help|-h|--help) usage ;;
     *) usage >&2; exit 2 ;;
 esac
