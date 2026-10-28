@@ -45,6 +45,19 @@ if [ "$(uname)" = Darwin ]; then
     rm -rf "$app"
     osacompile -o "$app" "$script"
     rm -f "$script"
+    # TV's icon, made with the Mac's own sips and iconutil; then sign the app
+    # again (ad hoc, as osacompile did), since its contents changed.
+    work=$(mktemp -d "${TMPDIR:-/tmp}/tvicon.XXXXXX")
+    fetch mac/icon.png "$work/icon.png"
+    mkdir "$work/tv.iconset"
+    for n in 16 32 128 256 512; do
+        sips -z $n $n "$work/icon.png" --out "$work/tv.iconset/icon_${n}x${n}.png" >/dev/null
+        sips -z $((n * 2)) $((n * 2)) "$work/icon.png" --out "$work/tv.iconset/icon_${n}x${n}@2x.png" >/dev/null
+    done
+    iconutil -c icns "$work/tv.iconset" -o "$app/Contents/Resources/applet.icns"
+    rm -rf "$work"
+    codesign --force --sign - "$app" 2>/dev/null
+    touch "$app"
     echo "Made $app: click it to start the box and open the TV folder."
 fi
 

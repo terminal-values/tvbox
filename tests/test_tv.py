@@ -293,3 +293,31 @@ def test_join_asks_for_name_and_email_and_keeps_them(box):
     assert r.returncode == 0, r.stdout + r.stderr
     text = box.config.read_text()
     assert "NAME='Sam Smith'" in text and "EMAIL='sam@example.org'" in text
+
+
+@pytest.mark.parametrize("setup,want", [
+    ({"runtimes": [], "config": True, "env": {}}, "no-runtime"),
+    ({"runtimes": ["container"], "config": True, "env": {"FAKE_DOWN": "1"}}, "runtime-stopped"),
+    ({"runtimes": ["container"], "config": False, "env": {}}, "not-joined"),
+    ({"runtimes": ["container"], "config": True, "env": {"FAKE_STATE": "absent"}}, "stopped"),
+    ({"runtimes": ["container"], "config": True, "env": {"FAKE_STATE": "stopped"}}, "stopped"),
+    ({"runtimes": ["container"], "config": True, "env": {"FAKE_STATE": "running"}}, "running"),
+])
+def test_check_says_where_things_stand(box, setup, want):
+    """For the Mac app: one word, always exit 0."""
+    box.runtimes(*setup["runtimes"])
+    if setup["config"]:
+        box.configure()
+    r = box.tv("check", **setup["env"])
+    assert r.returncode == 0
+    assert r.stdout.strip() == want
+
+
+@pytest.mark.parametrize("runtime,argv", [
+    ("container", ["container", "system", "start", "--enable-kernel-install"]),
+    ("podman", ["podman", "machine", "start"]),
+])
+def test_runtime_start(box, runtime, argv):
+    box.runtimes(runtime)
+    box.tv("runtime-start")
+    assert argv in box.calls()

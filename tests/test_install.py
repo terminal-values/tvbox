@@ -68,6 +68,16 @@ def test_builds_mac_app(home):
     assert "com.apple.quarantine" not in xattrs
 
 
+@pytest.mark.skipif(sys.platform != "darwin", reason="the app is for macOS")
+def test_mac_app_has_the_tv_icon(home, tmp_path):
+    install(home)
+    icon = home / "Applications/Terminal Values.app/Contents/Resources/applet.icns"
+    plain = tmp_path / "plain.app"
+    subprocess.run(["osacompile", "-o", str(plain), "-e", "return"], check=True)
+    assert icon.read_bytes() != (plain / "Contents/Resources/applet.icns").read_bytes()
+    assert icon.read_bytes()[:4] == b"icns"
+
+
 def test_uninstall_removes_line_app_and_tv(home, tmp_path):
     install(home)
     bin_ = tmp_path / "fakebin"

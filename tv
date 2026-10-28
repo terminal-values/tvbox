@@ -46,6 +46,13 @@ sudo apt install podman."
     else UID_IN=$(id -u) GID_IN=$(id -g); fi
 }
 
+runtime_answers() {
+    case $RT in
+        container) container system status >/dev/null 2>&1 ;;
+        *) "$RT" info >/dev/null 2>&1 ;;
+    esac
+}
+
 runtime_up() {
     find_runtime
     case $RT in
@@ -265,6 +272,25 @@ tv export-key > somewhere-safe/tv-age-key.txt"
     in_box cat /state/home/.passage/identities
 }
 
+# For the Mac app: where things stand, in one word.
+cmd_check() {
+    detect_runtime
+    if [ -z "$RT" ]; then say no-runtime
+    elif ! runtime_answers; then say runtime-stopped
+    elif [ -z "$LOGIN" ] || [ -z "$FOLDER" ]; then say not-joined
+    elif [ "$(box_state)" = running ]; then say running
+    else say stopped; fi
+}
+
+cmd_runtime_start() {
+    find_runtime
+    case $RT in
+        container) container system start --enable-kernel-install ;;
+        docker) if [ "$(uname)" = Darwin ]; then open -a Docker; else die 1 "Start Docker with: sudo systemctl start docker"; fi ;;
+        podman) podman machine start ;;
+    esac
+}
+
 cmd_uninstall() {
     keep=ask
     [ "${1:-}" = --yes-keep-state ] && keep=yes
@@ -370,6 +396,8 @@ case $cmd in
     import-key) cmd_import_key ;;
     export-key) cmd_export_key ;;
     folder) need_config; say "$FOLDER" ;;
+    check) cmd_check ;;
+    runtime-start) cmd_runtime_start ;;
     update) cmd_update ;;
     uninstall) cmd_uninstall "$@" ;;
     help|-h|--help) usage ;;
