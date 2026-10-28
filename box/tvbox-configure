@@ -40,7 +40,6 @@ cli config options local-ann-enabled set false
 cli config options relays-enabled set false
 cli config options natenabled set false
 cli config options uraccepted set -- -1
-cli config options raw-listen-addresses set tcp://127.0.0.1:22000
 
 if [ -n "$TVHOME_SYNCTHING_ID" ]; then
     # As JSON: Syncthing 1.29's `devices add --addresses` crashes.

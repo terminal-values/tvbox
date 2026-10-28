@@ -25,7 +25,10 @@ def emit(text):
 if url.endswith("/repos/terminal-values/tvbox/commits/main"):
     emit(json.dumps({"sha": new, "commit": {"message": "newest"}}, indent=2))
 elif "/repos/terminal-values/tvbox/compare/" in url:
-    emit(json.dumps({"commits": [
+    emit(json.dumps({
+        "base_commit": {"sha": "a" * 40, "commit": {"message": "The commit this box is on"}},
+        "merge_base_commit": {"sha": "a" * 40, "commit": {"message": "The commit this box is on"}},
+        "commits": [
         {"sha": "c1", "commit": {"message": "Make the box smaller\n\nbody"}},
         {"sha": new, "commit": {"message": "Fix tv status"}}]}, indent=2))
 elif url.startswith("https://ghcr.io/token"):

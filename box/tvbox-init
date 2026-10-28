@@ -31,7 +31,22 @@ as_member() {
 }
 
 # Restart a daemon if it dies, for as long as the box runs.
-keep() { ( while :; do as_member "$@"; sleep 2; done ) & }
+loops=
+keep() { ( while :; do as_member "$@"; sleep 2; done ) & loops="$loops $!"; }
+
+# When the box is stopped, stop the daemons properly: otherwise tvhome is
+# left holding a dead Syncthing connection and turns the box away for minutes
+# when it comes back.
+stop() {
+    # shellcheck disable=SC2086
+    kill $loops 2>/dev/null
+    pkill -TERM -f 'syncthing serve'; pkill -TERM socat
+    i=0
+    while pgrep -f 'syncthing serve' >/dev/null && [ $i -lt 20 ]; do sleep 0.5; i=$((i + 1)); done
+    pkill -TERM tailscaled
+    exit 0
+}
+trap stop TERM INT
 
 keep tailscaled --tun=userspace-networking --socks5-server=127.0.0.1:1055 \
     --statedir=/state/tailscale --socket=/var/run/tailscale/tailscaled.sock

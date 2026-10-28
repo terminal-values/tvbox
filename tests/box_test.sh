@@ -113,4 +113,12 @@ if [ $? -ne 0 ] && ! inbox test -e /state/home/.passage/identities; then
 else
     fail "join with a bad key: $out"
 fi
+# Stopping the box stops its daemons properly, so tvhome sees Syncthing
+# hang up instead of waiting on a dead connection.
+$RT stop "$NAME" >/dev/null 2>&1
+if $RT logs "$NAME" 2>&1 | grep -q "Signal 15 received; exiting"; then
+    ok "stopping the box stops Syncthing cleanly"
+else
+    fail "Syncthing was killed, not stopped, when the box stopped"
+fi
 exit "$fails"

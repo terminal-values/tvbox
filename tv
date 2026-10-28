@@ -143,8 +143,9 @@ image_digest() {  # image_digest REVISION
 }
 
 changes() {  # changes FROM TO: one line per commit, its subject
+    # Only the "commits" list: the reply also gives the starting commit, twice.
     curl -fsSL "$GITHUB/compare/$1...$2" 2>/dev/null |
-        sed -n 's/^ *"message": "\([^"\\]*\).*/  \1/p'
+        sed -n '/^  "commits": \[/,$ s/^ *"message": "\([^"\\]*\).*/  \1/p'
 }
 
 # Pin the newest published image, if GitHub and the registry answer.

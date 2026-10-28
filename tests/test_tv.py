@@ -238,6 +238,7 @@ def test_update_shows_and_asks_yes(box):
     r = box.tv("update", input="y\n", FAKE_STATE="running")
     assert r.returncode == 0, r.stdout + r.stderr
     assert "Make the box smaller" in r.stdout and "Fix tv status" in r.stdout
+    assert "The commit this box is on" not in r.stdout
     text = box.config.read_text()
     assert "IMAGE='ghcr.io/terminal-values/tvbox@sha256:newdigest'" in text
     assert f"REVISION='{NEW}'" in text
