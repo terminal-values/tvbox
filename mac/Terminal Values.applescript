@@ -24,7 +24,7 @@ end tv
 
 on tellThem(msg)
 	display dialog msg buttons {"OK"} default button "OK" with title appTitle
-end say
+end tellThem
 
 on fail(msg)
 	display dialog msg buttons {"OK"} default button "OK" with icon caution with title appTitle
