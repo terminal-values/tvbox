@@ -272,3 +272,11 @@ def test_run_runs_any_command_in_the_box(box):
     box.configure()
     box.tv("run", "sh", "-c", "echo hi", FAKE_STATE="running")
     assert box.call("exec")[-3:] == ["sh", "-c", "echo hi"]
+
+
+def test_join_takes_an_invitation_without_a_final_newline(box):
+    """pbpaste | tv join gives no newline at the end."""
+    box.runtimes("docker")
+    r = box.tv("join", "--login", "sam", input=INVITE.rstrip("\n"))
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "TVHOME_HOST=tvhome.example-tailnet.ts.net" in box.call("run")

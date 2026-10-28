@@ -167,7 +167,7 @@ cmd_join() {
     done
     if [ -z "$login" ]; then
         printf 'The login name you picked: '
-        read -r login || die 2 "No login name given."
+        read -r login || [ -n "$login" ] || die 2 "No login name given."
     fi
     printf '%s\n' "$login" | grep -Eq '^[a-z][a-z0-9-]{0,31}$' ||
         die 2 "'$login' won't do as a login: short, lowercase letters, digits and dashes, starting with a letter."
@@ -184,7 +184,7 @@ with --folder, or use it anyway with: tv join --adopt --folder $folder"
         printf 'The invitation Danny sent you (it starts tvjoin:): '
         stty -echo 2>/dev/null; read -r invite; stty echo 2>/dev/null; echo
     else
-        read -r invite || invite=
+        read -r invite || true  # keep a last line with no newline (pbpaste)
     fi
     old_ifs=$IFS; IFS=:
     # shellcheck disable=SC2086
@@ -269,7 +269,7 @@ cmd_uninstall() {
             say "Tailscale and Syncthing settings. If you haven't saved your age key"
             say "elsewhere, answer n and run tv export-key first."
             printf 'Delete %s too? [y/N] ' "$VOLUME"
-            read -r answer || answer=
+            read -r answer || true
             case $answer in
                 [yY]*) "$RT" volume rm "$VOLUME" >/dev/null && say "Deleted $VOLUME." ;;
                 *) say "Kept $VOLUME." ;;
@@ -304,7 +304,7 @@ cmd_update() {
     if [ -n "$REVISION" ]; then changes "$REVISION" "$new"
     else say "  (this box's version wasn't recorded, so the changes can't be listed)"; fi
     printf 'Update to it? [y/N] '
-    read -r answer || answer=
+    read -r answer || true
     case $answer in [yY]*) ;; *) say "Left as it was."; return ;; esac
     IMAGE=$REGISTRY@$digest REVISION=$new
     write_config

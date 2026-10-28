@@ -6,7 +6,7 @@
 set -u
 . /state/tvhome.env
 login=${1:?usage: tvbox-join LOGIN}
-read -r key || key=
+read -r key || true  # keep a last line with no newline
 [ -n "$key" ] || { echo "tvbox-join: no auth key given (it starts tskey-)" >&2; exit 2; }
 
 if ! tailscale up --authkey="$key" --hostname="tv-$login" --accept-dns=false --timeout=60s; then
