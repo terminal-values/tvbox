@@ -14,6 +14,12 @@ U=${TV_UID:-0} G=${TV_GID:-0}
 INSIDE=/home/tv/terminalvalues
 ST=/state/syncthing
 
+# ssh refuses to run as a uid with no passwd entry, and the member's uid
+# (from their computer) is unknown to the image.
+getent group "$G" >/dev/null || echo "tv:x:$G:" >> /etc/group
+getent passwd "$U" >/dev/null ||
+    echo "tv:x:$U:$G:${TV_NAME:-Terminal Values member}:$HOME:/bin/bash" >> /etc/passwd
+
 mkdir -p "$HOME" /state/tailscale "$ST" /var/run/tailscale
 chown "$U:$G" /state /state/home /state/tailscale "$ST" /var/run/tailscale
 # For the scripts tv runs in the box, which may not see this environment.

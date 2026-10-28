@@ -6,7 +6,8 @@
 set -eu
 . /state/tvhome.env
 INSIDE=/home/tv/terminalvalues
-login=${TV_LOGIN:?the box doesn't know your login; run tv join}
+# No apostrophes in this message: dash reads them as quotes, even here.
+login=${TV_LOGIN:?the box has no login yet, so run tv join}
 cd "$INSIDE"
 if [ ! -e .git ]; then
     echo "Fetching TV's history and code from tvhome..."

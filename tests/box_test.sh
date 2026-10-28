@@ -30,6 +30,7 @@ TVHOME_ID=$($RT run --rm --entrypoint sh "$IMAGE" -c \
 [ "$RT" = container ] && $RT volume create "$VOL" >/dev/null 2>&1
 $RT run -d --name "$NAME" -v "$FOLDER:/home/tv/terminalvalues" -v "$VOL:/state" \
     -e "TV_UID=$U" -e "TV_GID=$G" -e TV_LOGIN=tvtest \
+    -e "TV_NAME=Test Member" -e TV_EMAIL=tvtest@example.org \
     -e TVHOME_HOST=tvhome.example-tailnet.ts.net \
     -e "TVHOME_SYNCTHING_ID=$TVHOME_ID" "$IMAGE" >/dev/null || { fail "the box doesn't start"; exit 1; }
 
@@ -57,7 +58,7 @@ fi
 
 conf=$(inbox cat /state/syncthing/config.xml 2>/dev/null)
 for want in '<globalAnnounceEnabled>false' '<localAnnounceEnabled>false' '<relaysEnabled>false' \
-            'path="/home/tv/terminalvalues"' 'ignorePerms="true"' 'rescanIntervalS="60"' \
+            'path="/home/tv/terminalvalues"' 'ignorePerms="true"' 'rescanIntervalS="15"' \
             "id=\"$TVHOME_ID\"" '<address>tcp://tvhome.example-tailnet.ts.net:22000</address>'; do
     case $conf in
         *"$want"*) ok "Syncthing config has $want" ;;
@@ -80,6 +81,24 @@ if inbox grep -q 'ProxyCommand tailscale nc %h %p' /state/home/.ssh/config 2>/de
     ok "ssh reaches tvhome through Tailscale, as the member"
 else
     fail "the ssh config is missing or wrong"
+fi
+
+# Every script in the box parses (dash is pickier than bash: an apostrophe
+# in ${VAR:?message} broke tvbox-catch-up).
+for f in $(inbox sh -c 'ls /usr/local/bin/tvbox-*'); do
+    if inbox sh -n "$f" 2>/dev/null; then ok "$f parses"; else fail "$f doesn't parse: $(inbox sh -n "$f" 2>&1)"; fi
+done
+# ssh needs a passwd entry for the uid it runs as, and commits need a name.
+if inbox ssh -G tvhome 2>/dev/null | grep -qx 'user tvtest'; then
+    ok "ssh runs as the member's uid"
+else
+    fail "ssh can't run as uid $U: $(inbox ssh -G tvhome 2>&1 | head -1)"
+fi
+if [ "$(inbox git config --global user.name)" = "Test Member" ] &&
+   [ "$(inbox git config --global user.email)" = tvtest@example.org ]; then
+    ok "git commits carry the member's name and email"
+else
+    fail "git's user.name/user.email aren't the member's"
 fi
 
 out=$($RT exec -i -u "$U:$G" "$NAME" tvbox-join tvtest </dev/null 2>&1)

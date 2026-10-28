@@ -48,6 +48,8 @@ class Box:
         kw.setdefault("FOLDER", str(self.home / "terminalvalues"))
         kw.setdefault("IMAGE", "ghcr.io/terminal-values/tvbox@sha256:abc")
         kw.setdefault("LOGIN", "sam")
+        kw.setdefault("NAME", "Sam Smith")
+        kw.setdefault("EMAIL", "sam@example.org")
         kw.setdefault("TAILNET", "example-tailnet.ts.net")
         kw.setdefault("TVHOME_ID", STID)
         self.config.write_text("".join(f"{k}='{v}'\n" for k, v in kw.items()))
@@ -111,6 +113,7 @@ def test_start_args_quote_spaces(box):
     assert run[-1] == "ghcr.io/terminal-values/tvbox@sha256:abc"
     assert "TVHOME_HOST=tvhome.example-tailnet.ts.net" in run
     assert f"TVHOME_SYNCTHING_ID={STID}" in run
+    assert "TV_NAME=Sam Smith" in run and "TV_EMAIL=sam@example.org" in run
 
 
 def test_start_existing_box_starts_it(box):
@@ -280,3 +283,12 @@ def test_join_takes_an_invitation_without_a_final_newline(box):
     r = box.tv("join", "--login", "sam", input=INVITE.rstrip("\n"))
     assert r.returncode == 0, r.stdout + r.stderr
     assert "TVHOME_HOST=tvhome.example-tailnet.ts.net" in box.call("run")
+
+
+def test_join_asks_for_name_and_email_and_keeps_them(box):
+    box.runtimes("docker")
+    r = box.tv("join", "--login", "sam", "--name", "Sam Smith", "--email", "sam@example.org",
+               input=INVITE)
+    assert r.returncode == 0, r.stdout + r.stderr
+    text = box.config.read_text()
+    assert "NAME='Sam Smith'" in text and "EMAIL='sam@example.org'" in text

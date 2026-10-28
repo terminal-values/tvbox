@@ -10,6 +10,10 @@ cli() { syncthing cli --home="$ST" "$@"; }
 # Only TV's data syncs; code and instructions come by git.
 cp /etc/tvbox/stignore "$INSIDE/.stignore"
 
+# Commits carry the member's name and email (from tv join).
+[ -n "${TV_NAME:-}" ] && git config --global user.name "$TV_NAME"
+[ -n "${TV_EMAIL:-}" ] && git config --global user.email "$TV_EMAIL"
+
 # ssh (and so git) reaches tvhome through Tailscale, as the member.
 if [ -n "${TV_LOGIN:-}" ]; then
     mkdir -p "$HOME/.ssh" && chmod 700 "$HOME/.ssh"
@@ -46,7 +50,9 @@ fi
 cli config folders list | grep -qx terminalvalues ||
     cli config folders add --id terminalvalues --label "Terminal Values" --path "$INSIDE"
 cli config folders terminalvalues ignore-perms set true
-cli config folders terminalvalues rescan-intervals set 60
+# Often: file-change notices don't cross some runtimes' mounts (Apple's
+# container), and a rescan only compares timestamps.
+cli config folders terminalvalues rescan-intervals set 15
 if [ -n "$TVHOME_SYNCTHING_ID" ]; then
     cli config folders terminalvalues devices list | grep -qx "$TVHOME_SYNCTHING_ID" ||
         cli config folders terminalvalues devices add --device-id "$TVHOME_SYNCTHING_ID"

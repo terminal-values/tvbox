@@ -16,7 +16,7 @@ DEFAULT_IMAGE=$REGISTRY:latest
 GITHUB=https://api.github.com/repos/terminal-values/tvbox
 CONFIG=${TV_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/tv/config}
 
-FOLDER= IMAGE= LOGIN= RUNTIME= REVISION= TAILNET= TVHOME_ID=
+FOLDER= IMAGE= LOGIN= NAME= EMAIL= RUNTIME= REVISION= TAILNET= TVHOME_ID=
 # shellcheck disable=SC1090
 [ -r "$CONFIG" ] && . "$CONFIG"
 IMAGE=${IMAGE:-$DEFAULT_IMAGE}
@@ -84,6 +84,7 @@ create_box() {
         -v "$FOLDER:$INSIDE" -v "$VOLUME:/state" \
         -p "127.0.0.1:$PORT:$PORT" \
         -e "TV_UID=$UID_IN" -e "TV_GID=$GID_IN" -e "TV_LOGIN=$LOGIN" \
+        -e "TV_NAME=$NAME" -e "TV_EMAIL=$EMAIL" \
         -e "TVHOME_HOST=tvhome.$TAILNET" -e "TVHOME_SYNCTHING_ID=$TVHOME_ID" \
         "$IMAGE" >/dev/null || die 1 "The box wouldn't start (see above)."
 }
@@ -111,6 +112,8 @@ write_config() {
         say "FOLDER=$(quote "$FOLDER")"
         say "IMAGE=$(quote "$IMAGE")"
         say "LOGIN=$(quote "$LOGIN")"
+        say "NAME=$(quote "$NAME")"
+        say "EMAIL=$(quote "$EMAIL")"
         say "RUNTIME=$(quote "$RT")"
         say "REVISION=$(quote "$REVISION")"
         say "TAILNET=$(quote "$TAILNET")"
@@ -155,10 +158,12 @@ pin_latest() {
 # --- commands --------------------------------------------------------------
 
 cmd_join() {
-    login= folder= adopt=no
+    login= folder= adopt=no name=$NAME email=$EMAIL
     while [ $# -gt 0 ]; do
         case $1 in
             --login) login=${2:-}; shift ;;
+            --name) name=${2:-}; shift ;;
+            --email) email=${2:-}; shift ;;
             --folder) folder=${2:-}; shift ;;
             --adopt) adopt=yes ;;
             *) die 2 "tv join: unknown option $1" ;;
@@ -171,6 +176,9 @@ cmd_join() {
     fi
     printf '%s\n' "$login" | grep -Eq '^[a-z][a-z0-9-]{0,31}$' ||
         die 2 "'$login' won't do as a login: short, lowercase letters, digits and dashes, starting with a letter."
+    # For the history: who made each commit.
+    if [ -z "$name" ] && [ -t 0 ]; then printf 'Your name, as it should appear in TV'"'"'s history: '; read -r name || true; fi
+    if [ -z "$email" ] && [ -t 0 ]; then printf 'Your email: '; read -r email || true; fi
     folder=${folder:-$HOME/terminalvalues}
     if [ -d "$folder" ] && [ -n "$(ls -A "$folder")" ] && [ ! -e "$folder/.git" ] &&
        [ "$adopt" = no ]; then
@@ -197,6 +205,7 @@ with --folder, or use it anyway with: tv join --adopt --folder $folder"
     runtime_up
     mkdir -p "$folder" || die 1 "Couldn't make $folder."
     FOLDER=$(cd "$folder" && pwd) LOGIN=$login TAILNET=$tailnet TVHOME_ID=$tvhome_id
+    NAME=$name EMAIL=$email
     [ "$IMAGE" = "$DEFAULT_IMAGE" ] && pin_latest
     write_config
     # A box made before this join may know another tailnet: make it afresh

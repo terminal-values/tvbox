@@ -49,4 +49,4 @@ if [ "$(uname)" = Darwin ]; then
 fi
 
 echo
-echo "Next: tv join (with the login name you picked and the key Danny sent you)."
+echo "Next: tv join, with the login name you picked and the invitation Danny sent you."
