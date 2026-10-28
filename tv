@@ -11,10 +11,12 @@ BOX=tvbox
 VOLUME=tv-state
 INSIDE=/home/tv/terminalvalues
 PORT=8484
-DEFAULT_IMAGE=ghcr.io/terminal-values/tvbox:latest
+REGISTRY=ghcr.io/terminal-values/tvbox
+DEFAULT_IMAGE=$REGISTRY:latest
+GITHUB=https://api.github.com/repos/terminal-values/tvbox
 CONFIG=${TV_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/tv/config}
 
-FOLDER= IMAGE= LOGIN= RUNTIME=
+FOLDER= IMAGE= LOGIN= RUNTIME= REVISION=
 # shellcheck disable=SC1090
 [ -r "$CONFIG" ] && . "$CONFIG"
 IMAGE=${IMAGE:-$DEFAULT_IMAGE}
@@ -109,7 +111,42 @@ write_config() {
         say "IMAGE=$(quote "$IMAGE")"
         say "LOGIN=$(quote "$LOGIN")"
         say "RUNTIME=$(quote "$RT")"
+        say "REVISION=$(quote "$REVISION")"
     } > "$CONFIG.tmp" && mv -f "$CONFIG.tmp" "$CONFIG"
+}
+
+# --- versions --------------------------------------------------------------
+# The box runs with the age key and the secrets, so a new image is trusted
+# like new code: it's pinned by digest, and tv update shows what changed
+# (tvbox's commits since this one) and asks first. GitHub's JSON is read
+# with sed, since a fresh Mac may have no usable Python.
+
+latest_revision() {
+    curl -fsSL "$GITHUB/commits/main" 2>/dev/null |
+        sed -n 's/^  "sha": "\([0-9a-f]*\)".*/\1/p' | head -1
+}
+
+image_digest() {  # image_digest REVISION
+    token=$(curl -fsSL "https://ghcr.io/token?scope=repository:terminal-values/tvbox:pull" 2>/dev/null |
+        sed -n 's/.*"token": *"\([^"]*\)".*/\1/p')
+    rev7=$(printf '%s' "$1" | head -c 7)
+    curl -fsSI -H "Authorization: Bearer $token" \
+        -H "Accept: application/vnd.oci.image.index.v1+json" \
+        "https://ghcr.io/v2/terminal-values/tvbox/manifests/sha-$rev7" 2>/dev/null |
+        tr -d '\r' | sed -n 's/^[Dd]ocker-[Cc]ontent-[Dd]igest: *//p'
+}
+
+changes() {  # changes FROM TO: one line per commit, its subject
+    curl -fsSL "$GITHUB/compare/$1...$2" 2>/dev/null |
+        sed -n 's/^ *"message": "\([^"\\]*\).*/  \1/p'
+}
+
+# Pin the newest published image, if GitHub and the registry answer.
+pin_latest() {
+    command -v curl >/dev/null 2>&1 || return 1
+    new=$(latest_revision); [ -n "$new" ] || return 1
+    digest=$(image_digest "$new"); [ -n "$digest" ] || return 1
+    IMAGE=$REGISTRY@$digest REVISION=$new
 }
 
 # --- commands --------------------------------------------------------------
@@ -140,6 +177,7 @@ with --folder, or use it anyway with: tv join --adopt --folder $folder"
     runtime_up
     mkdir -p "$folder" || die 1 "Couldn't make $folder."
     FOLDER=$(cd "$folder" && pwd) LOGIN=$login
+    [ "$IMAGE" = "$DEFAULT_IMAGE" ] && pin_latest
     write_config
     if [ -t 0 ]; then
         printf 'The key Danny sent you (it starts tskey-): '
@@ -233,6 +271,39 @@ cmd_uninstall() {
     say "tv is uninstalled.${FOLDER:+ The TV folder, $FOLDER, is still there.}"
 }
 
+cmd_update() {
+    need_config
+    runtime_up
+    command -v curl >/dev/null 2>&1 || die 1 "tv update needs curl."
+    new=$(latest_revision)
+    [ -n "$new" ] || die 1 "Couldn't reach GitHub to check for a newer box."
+    if [ "$new" = "$REVISION" ]; then
+        say "The box is up to date."
+        return
+    fi
+    digest=$(image_digest "$new")
+    [ -n "$digest" ] || die 1 "There's a newer box, but its image isn't published yet. Try again later."
+    say "There's a newer box. What changed:"
+    if [ -n "$REVISION" ]; then changes "$REVISION" "$new"
+    else say "  (this box's version wasn't recorded, so the changes can't be listed)"; fi
+    printf 'Update to it? [y/N] '
+    read -r answer || answer=
+    case $answer in [yY]*) ;; *) say "Left as it was."; return ;; esac
+    IMAGE=$REGISTRY@$digest REVISION=$new
+    write_config
+    if [ "$(box_state)" != absent ]; then
+        "$RT" stop "$BOX" >/dev/null 2>&1
+        "$RT" rm "$BOX" >/dev/null || die 1 "Couldn't remove the old box."
+    fi
+    create_box
+    # tv updates itself too, from the same commit.
+    if [ "$0" = "$HOME/.local/bin/tv" ] &&
+       curl -fsSL "https://raw.githubusercontent.com/terminal-values/tvbox/$new/tv" -o "$0.new"; then
+        chmod 755 "$0.new" && mv -f "$0.new" "$0"
+    fi
+    say "Updated. Your folder, key and secrets are as they were."
+}
+
 usage() {
     cat <<'EOF'
 tv: Terminal Values' box.
@@ -270,6 +341,7 @@ case $cmd in
     import-key) cmd_import_key ;;
     export-key) cmd_export_key ;;
     folder) need_config; say "$FOLDER" ;;
+    update) cmd_update ;;
     uninstall) cmd_uninstall "$@" ;;
     help|-h|--help) usage ;;
     *) usage >&2; exit 2 ;;

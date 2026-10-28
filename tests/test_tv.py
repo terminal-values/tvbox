@@ -208,3 +208,42 @@ def test_export_key_refuses_a_terminal(box):
     box.configure()
     # Not a tty in tests, so it would export; check the guard is in the script.
     assert "[ -t 1 ]" in TV.read_text()
+
+
+FAKECURL = Path(__file__).resolve().parent / "fakecurl"
+OLD = "a" * 40
+NEW = "b" * 40
+
+
+def updatable(box, revision=OLD):
+    box.runtimes("docker")
+    (box.bin / "curl").symlink_to(FAKECURL)
+    box.configure(IMAGE="ghcr.io/terminal-values/tvbox@sha256:old", REVISION=revision)
+
+
+def test_update_shows_and_asks_yes(box):
+    updatable(box)
+    r = box.tv("update", input="y\n", FAKE_STATE="running")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "Make the box smaller" in r.stdout and "Fix tv status" in r.stdout
+    text = box.config.read_text()
+    assert "IMAGE='ghcr.io/terminal-values/tvbox@sha256:newdigest'" in text
+    assert f"REVISION='{NEW}'" in text
+    assert box.call("rm")[-1] == "tvbox"
+    assert box.call("run")[-1] == "ghcr.io/terminal-values/tvbox@sha256:newdigest"
+
+
+def test_update_no_leaves_everything(box):
+    updatable(box)
+    before = box.config.read_text()
+    r = box.tv("update", input="n\n", FAKE_STATE="running")
+    assert box.config.read_text() == before
+    assert not [c for c in box.calls() if c[1] in ("rm", "run")]
+
+
+def test_update_when_current(box):
+    updatable(box, revision=NEW)
+    r = box.tv("update", FAKE_STATE="running")
+    assert r.returncode == 0
+    assert "up to date" in r.stdout
+    assert not [c for c in box.calls() if c[1] in ("rm", "run")]

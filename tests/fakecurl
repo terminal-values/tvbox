@@ -1,0 +1,39 @@
+#!/usr/bin/env python3
+"""Stands in for curl in tv update's tests: GitHub's API and ghcr.io.
+
+FAKE_NEW is the newest commit on main (default "new" * 8 hex-ish)."""
+import json
+import os
+import sys
+
+new = os.environ.get("FAKE_NEW", "b" * 40)
+args = sys.argv[1:]
+url = next(a for a in reversed(args) if a.startswith("http"))
+head = "-I" in args or any(a.startswith("-") and "I" in a and not a.startswith("--") for a in args)
+out = None
+if "-o" in args:
+    out = args[args.index("-o") + 1]
+
+
+def emit(text):
+    if out:
+        open(out, "w").write(text)
+    else:
+        sys.stdout.write(text)
+
+
+if url.endswith("/repos/terminal-values/tvbox/commits/main"):
+    emit(json.dumps({"sha": new, "commit": {"message": "newest"}}, indent=2))
+elif "/repos/terminal-values/tvbox/compare/" in url:
+    emit(json.dumps({"commits": [
+        {"sha": "c1", "commit": {"message": "Make the box smaller\n\nbody"}},
+        {"sha": new, "commit": {"message": "Fix tv status"}}]}, indent=2))
+elif url.startswith("https://ghcr.io/token"):
+    emit(json.dumps({"token": "t"}))
+elif "/v2/terminal-values/tvbox/manifests/sha-" + new[:7] in url and head:
+    emit("HTTP/2 200\r\ndocker-content-digest: sha256:newdigest\r\n\r\n")
+elif url.startswith("https://raw.githubusercontent.com/terminal-values/tvbox/"):
+    emit("#!/bin/sh\necho new tv\n")
+else:
+    sys.stderr.write(f"fakecurl: no answer for {url}\n")
+    sys.exit(22)

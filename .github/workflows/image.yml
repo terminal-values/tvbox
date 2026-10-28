@@ -1,0 +1,37 @@
+# Builds the box for Apple silicon (arm64) and Linux PCs (amd64) and
+# publishes it as ghcr.io/terminal-values/tvbox, tagged latest and
+# sha-<commit>. tv update finds a commit's image by that tag.
+name: image
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  packages: write
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/terminal-values/tvbox
+          tags: |
+            type=raw,value=latest
+            type=sha,format=short,prefix=sha-
+      - uses: docker/build-push-action@v6
+        with:
+          context: box
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
