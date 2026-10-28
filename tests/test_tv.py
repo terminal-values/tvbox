@@ -361,3 +361,11 @@ def test_join_from_clipboard_never_prints_the_key(box):
     r = box.tv("join", "--login", "sam", "--name", "Sam", "--email", "s@example.org",
                "--from-clipboard", TV_POLL="0")
     assert "tskey-auth-x-y" not in r.stdout + r.stderr
+
+
+def test_join_checks_the_runtime_before_asking_anything(box):
+    box.configure(FOLDER="", LOGIN="")
+    r = box.tv("join")
+    assert r.returncode == 4
+    assert "container runtime" in r.stdout + r.stderr
+    assert "login" not in r.stdout.lower() and "invitation" not in r.stdout.lower()

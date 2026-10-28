@@ -205,6 +205,15 @@ cmd_join() {
         esac
         shift
     done
+    # The runtime first, so nobody answers questions only to be told to
+    # install it. At a terminal, offer to start one that isn't running.
+    find_runtime
+    if ! runtime_answers && [ -t 0 ]; then
+        printf 'The container runtime (%s) isn'"'"'t running. Start it now? [Y/n] ' "$RT"
+        read -r answer || true
+        case $answer in [nN]*) ;; *) cmd_runtime_start ;; esac
+    fi
+    runtime_up
     if [ -z "$login" ]; then
         printf 'The login name you picked: '
         read -r login || [ -n "$login" ] || die 2 "No login name given."
