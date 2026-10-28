@@ -165,8 +165,34 @@ pin_latest() {
 
 # --- commands --------------------------------------------------------------
 
+# parse_invitation TEXT: sets tailnet, tvhome_id and key; fails if TEXT
+# isn't a whole invitation (tvjoin:TAILNET:TVHOME-SYNCTHING-ID:tskey-...).
+parse_invitation() {
+    old_ifs=$IFS; IFS=:
+    # shellcheck disable=SC2086
+    set -- $1
+    IFS=$old_ifs
+    [ $# -eq 4 ] && [ "$1" = tvjoin ] && [ -n "$2" ] && [ -n "$3" ] || return 1
+    case $4 in tskey-?*) ;; *) return 1 ;; esac
+    tailnet=$2 tvhome_id=$3 key=$4
+}
+
+# Wait until the clipboard holds an invitation, so the member copies it from
+# Signal and never pastes it (or sees the key) in the terminal.
+invitation_from_clipboard() {
+    say "Now copy the invitation Danny sent you: the whole line, starting tvjoin:,"
+    say "from Signal (or wherever he sent it). I'll notice it on the clipboard."
+    say "(Ctrl-C to stop.)"
+    while :; do
+        invite=$(pbpaste 2>/dev/null)
+        parse_invitation "$invite" && break
+        sleep "${TV_POLL:-1}"
+    done
+    say "Got it."
+}
+
 cmd_join() {
-    login= folder= adopt=no name=$NAME email=$EMAIL
+    login= folder= adopt=no name=$NAME email=$EMAIL clip=no
     while [ $# -gt 0 ]; do
         case $1 in
             --login) login=${2:-}; shift ;;
@@ -174,6 +200,7 @@ cmd_join() {
             --email) email=${2:-}; shift ;;
             --folder) folder=${2:-}; shift ;;
             --adopt) adopt=yes ;;
+            --from-clipboard) clip=yes ;;
             *) die 2 "tv join: unknown option $1" ;;
         esac
         shift
@@ -195,21 +222,19 @@ with --folder, or use it anyway with: tv join --adopt --folder $folder"
     fi
     # The invitation Danny sends: tvjoin:TAILNET:TVHOME-SYNCTHING-ID:KEY.
     # It's the only place the box learns where TV's tailnet is, and the key
-    # in it goes to the box and nowhere else.
-    if [ -t 0 ]; then
-        printf 'The invitation Danny sent you (it starts tvjoin:): '
+    # in it goes to the box and nowhere else. At a terminal on a Mac, tv
+    # watches the clipboard for it; otherwise it's read, unseen, from input.
+    if [ "$clip" = yes ] || { [ -t 0 ] && command -v pbpaste >/dev/null 2>&1; }; then
+        invitation_from_clipboard
+    elif [ -t 0 ]; then
+        printf 'The invitation Danny sent you (it starts tvjoin:; it won'"'"'t show): '
         stty -echo 2>/dev/null; read -r invite; stty echo 2>/dev/null; echo
     else
         read -r invite || true  # keep a last line with no newline (pbpaste)
     fi
-    old_ifs=$IFS; IFS=:
-    # shellcheck disable=SC2086
-    set -- $invite
-    IFS=$old_ifs
-    [ $# -eq 4 ] && [ "$1" = tvjoin ] && [ -n "$2" ] && [ -n "$3" ] &&
-        case $4 in tskey-*) true ;; *) false ;; esac ||
+    parse_invitation "$invite" ||
         die 2 "That isn't a whole invitation: it's one line, starting tvjoin:, as Danny sent it."
-    tailnet=$2 tvhome_id=$3 key=$4
+
     runtime_up
     mkdir -p "$folder" || die 1 "Couldn't make $folder."
     FOLDER=$(cd "$folder" && pwd) LOGIN=$login TAILNET=$tailnet TVHOME_ID=$tvhome_id
@@ -223,7 +248,11 @@ with --folder, or use it anyway with: tv join --adopt --folder $folder"
         "$RT" rm "$BOX" >/dev/null 2>&1
     fi
     create_box
-    printf '%s\n' "$key" | in_box tvbox-join "$LOGIN"
+    printf '%s\n' "$key" | in_box tvbox-join "$LOGIN" || exit $?
+    # The invitation's key is used up now, but don't leave it lying about.
+    if [ "$clip" = yes ] || command -v pbcopy >/dev/null 2>&1; then
+        printf '' | pbcopy 2>/dev/null
+    fi
 }
 
 cmd_start() {

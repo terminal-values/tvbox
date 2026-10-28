@@ -321,3 +321,43 @@ def test_runtime_start(box, runtime, argv):
     box.runtimes(runtime)
     box.tv("runtime-start")
     assert argv in box.calls()
+
+
+def clipboard(box, contents):
+    """A fake pbpaste that gives each of contents in turn (the last one
+    from then on), and a fake pbcopy that records what it's given."""
+    clip = box.tmp / "clip"
+    clip.write_text("\n".join(contents))
+    count = box.tmp / "clipcount"
+    count.write_text("0")
+    (box.bin / "pbpaste").write_text(f"""#!/bin/sh
+n=$(cat {count}); echo $((n + 1)) > {count}
+total=$(wc -l < {clip}); total=$((total + 1))
+[ $n -ge $total ] && n=$((total - 1))
+sed -n "$((n + 1))p" {clip} | tr -d '\\n'
+""")
+    (box.bin / "pbcopy").write_text(f"#!/bin/sh\ncat > {box.tmp / 'copied'}; echo copied >> {box.tmp / 'pbcopy.log'}\n")
+    for f in ("pbpaste", "pbcopy"):
+        (box.bin / f).chmod(0o755)
+    for tool in ("wc", "tr", "sleep"):
+        if not (box.bin / tool).exists():
+            (box.bin / tool).symlink_to(shutil.which(tool))
+
+
+def test_join_waits_for_the_invitation_on_the_clipboard(box):
+    box.runtimes("docker")
+    clipboard(box, ["some other text", "tvjoin:not-a-whole-one", INVITE.strip()])
+    r = box.tv("join", "--login", "sam", "--name", "Sam", "--email", "s@example.org",
+               "--from-clipboard", TV_POLL="0")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "copy the invitation" in r.stdout
+    assert "TVHOME_HOST=tvhome.example-tailnet.ts.net" in box.call("run")
+    assert (box.tmp / "copied").read_text() == ""  # the clipboard is cleared after
+
+
+def test_join_from_clipboard_never_prints_the_key(box):
+    box.runtimes("docker")
+    clipboard(box, [INVITE.strip()])
+    r = box.tv("join", "--login", "sam", "--name", "Sam", "--email", "s@example.org",
+               "--from-clipboard", TV_POLL="0")
+    assert "tskey-auth-x-y" not in r.stdout + r.stderr

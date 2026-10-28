@@ -23,7 +23,7 @@ def home(tmp_path):
 
 def env(home, shell="/bin/zsh", path="/usr/bin:/bin", **kw):
     e = {"HOME": str(home), "SHELL": shell, "PATH": path, "TVBOX_SOURCE": str(ROOT),
-         "TV_CONFIG": str(home / ".config/tv/config")}
+         "TV_CONFIG": str(home / ".config/tv/config"), "TVBOX_NO_JOIN": "1"}
     e.update(kw)
     return e
 
@@ -126,3 +126,9 @@ cp "{ROOT}/$path" "$out"
     r = subprocess.run(["sh", str(ROOT / "install.sh")], env=e, capture_output=True, text=True)
     assert r.returncode == 0, r.stdout + r.stderr
     assert all(" " not in u for u in log.read_text().splitlines())
+
+
+def test_installer_goes_on_to_join():
+    """After installing, the installer runs tv join at the terminal (not in tests)."""
+    text = (ROOT / "install.sh").read_text()
+    assert '"$BIN/tv" join </dev/tty' in text and "TVBOX_NO_JOIN" in text
