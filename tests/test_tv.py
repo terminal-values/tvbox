@@ -265,3 +265,10 @@ def test_join_wants_the_whole_invitation(box, bad):
     assert r.returncode == 2
     assert "invitation" in r.stdout + r.stderr
     assert not [c for c in box.calls() if c[1] == "run"]
+
+
+def test_run_runs_any_command_in_the_box(box):
+    box.runtimes("docker")
+    box.configure()
+    box.tv("run", "sh", "-c", "echo hi", FAKE_STATE="running")
+    assert box.call("exec")[-3:] == ["sh", "-c", "echo hi"]

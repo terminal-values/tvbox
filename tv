@@ -335,6 +335,7 @@ tv: Terminal Values' box.
   tv passage ... TV's shared secrets
   tv pages       open TV's internal pages in your browser
   tv shell       a shell in the box, in the TV folder
+  tv run CMD ... run any command in the box, in the TV folder
   tv import-key  bring in your saved age key (tv import-key < file)
   tv export-key  save a copy of your age key (tv export-key > file)
   tv update      get a newer box, showing what changed first
@@ -353,6 +354,7 @@ case $cmd in
     catch-up) need_box; in_box tvbox-catch-up ;;
     push) need_box; in_box tvbox-push ;;
     git|passage) need_box; in_box "$cmd" "$@" ;;
+    run) need_box; in_box "$@" ;;
     shell) need_box; in_box bash -l ;;
     pages) cmd_pages ;;
     import-key) cmd_import_key ;;
