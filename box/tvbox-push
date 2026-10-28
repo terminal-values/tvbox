@@ -1,0 +1,3 @@
+#!/bin/sh
+# tv push: the folder's own `make push` (code and secrets to tvhome).
+cd /home/tv/terminalvalues && exec make push

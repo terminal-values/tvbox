@@ -1,4 +1,36 @@
 #!/bin/sh
-# The box's first process.
-mkdir -p "$HOME"
-exec sleep infinity
+# The box's first process. It starts as root only to hand /state to the
+# member's uid (TV_UID, TV_GID, from tv; 0 under rootless Podman, whose
+# root is the member), then runs everything as them:
+#   - tailscaled, in userspace mode with a SOCKS5 proxy on 127.0.0.1:1055,
+#     so the box needs no network device and nothing on the computer changes;
+#   - Syncthing, syncing the TV folder with tvhome only, through that proxy;
+#   - tvbox-pages, which hands the computer's 127.0.0.1:8484 to tvhome's pages.
+# The box runs only while the member wants it; nothing restarts it.
+set -u
+. /etc/tvbox/tvhome.env
+U=${TV_UID:-0} G=${TV_GID:-0}
+INSIDE=/home/tv/terminalvalues
+ST=/state/syncthing
+
+mkdir -p "$HOME" /state/tailscale "$ST" /var/run/tailscale
+chown "$U:$G" /state /state/home /state/tailscale "$ST" /var/run/tailscale
+as_member() {
+    if [ "$U" = 0 ]; then "$@"
+    else setpriv --reuid="$U" --regid="$G" --clear-groups "$@"; fi
+}
+
+# Restart a daemon if it dies, for as long as the box runs.
+keep() { ( while :; do as_member "$@"; sleep 2; done ) & }
+
+keep tailscaled --tun=userspace-networking --socks5-server=127.0.0.1:1055 \
+    --statedir=/state/tailscale --socket=/var/run/tailscale/tailscaled.sock
+
+[ -s "$ST/config.xml" ] || as_member syncthing generate --home="$ST" --no-default-folder >/dev/null
+all_proxy=socks5://127.0.0.1:1055 keep syncthing serve --home="$ST" --no-browser \
+    --gui-address=127.0.0.1:8384 --no-restart --no-upgrade
+as_member tvbox-configure &
+
+keep tvbox-pages
+
+wait

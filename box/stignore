@@ -1,0 +1,12 @@
+.git
+.venv
+secrets
+__pycache__
+.pytest_cache
+.DS_Store
+!/doc
+!/www
+!/ledger
+!/entity
+!/site
+*

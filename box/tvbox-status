@@ -1,0 +1,20 @@
+#!/bin/sh
+# Is the box on TV's tailnet, and is Syncthing connected to tvhome?
+set -u
+. /etc/tvbox/tvhome.env
+bad=0
+if tailscale status >/dev/null 2>&1; then
+    echo "On TV's tailnet."
+else
+    echo "Not on TV's tailnet: tv join (with a key from Danny), or check your connection."
+    bad=1
+fi
+conn=$(syncthing cli --home=/state/syncthing show connections 2>/dev/null)
+if [ -n "$TVHOME_SYNCTHING_ID" ] &&
+   printf '%s' "$conn" | tr -d ' \n' | grep -q "\"$TVHOME_SYNCTHING_ID\":{[^}]*\"connected\":true"; then
+    echo "Syncing with tvhome."
+else
+    echo "Not connected to tvhome's Syncthing yet, so documents aren't syncing."
+    bad=1
+fi
+exit "$bad"

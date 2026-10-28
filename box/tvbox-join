@@ -1,0 +1,36 @@
+#!/bin/sh
+# tvbox-join LOGIN, with the auth key Danny sent on stdin: put the box on
+# TV's tailnet, make the member's age key, and print what Danny needs.
+# Safe to run again: a failed login leaves nothing behind, and an existing
+# age key is kept.
+set -u
+. /etc/tvbox/tvhome.env
+login=${1:?usage: tvbox-join LOGIN}
+read -r key || key=
+[ -n "$key" ] || { echo "tvbox-join: no auth key given (it starts tskey-)" >&2; exit 2; }
+
+if ! tailscale up --authkey="$key" --hostname="tv-$login" --accept-dns=false --timeout=60s; then
+    echo "tvbox-join: couldn't join TV's tailnet (above is Tailscale's reason). Check the key, or ask Danny for a new one." >&2
+    exit 1
+fi
+
+ids=$HOME/.passage/identities
+if [ ! -s "$ids" ]; then
+    mkdir -p "$HOME/.passage" && chmod 700 "$HOME/.passage"
+    age-keygen -o "$ids.tmp" 2>/dev/null && chmod 600 "$ids.tmp" && mv "$ids.tmp" "$ids" ||
+        { rm -f "$ids.tmp"; echo "tvbox-join: couldn't make your age key" >&2; exit 1; }
+    made=yes
+fi
+
+echo
+echo "You're on TV's tailnet. Send these three lines to Danny:"
+echo
+echo "login: $login"
+echo "syncthing: $(syncthing serve --home=/state/syncthing --device-id)"
+echo "age: $(age-keygen -y "$ids")"
+echo
+if [ "${made:-}" = yes ]; then
+    echo "Your secret key is new. Save a copy somewhere safe now, such as your"
+    echo "password manager: tv export-key > tv-age-key.txt, then store that file"
+    echo "safely and delete it here."
+fi

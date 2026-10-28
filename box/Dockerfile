@@ -30,9 +30,14 @@ RUN git clone -q https://github.com/FiloSottile/passage /tmp/passage \
 
 COPY --from=uv /uv /uvx /usr/local/bin/
 
-COPY tvbox-init /usr/local/bin/
-RUN chmod 755 /usr/local/bin/tvbox-init \
+COPY tvbox-init tvbox-configure tvbox-join tvbox-status tvbox-pages \
+     tvbox-catch-up tvbox-push tvbox-import-key /usr/local/bin/
+COPY tvhome.env stignore /etc/tvbox/
+RUN chmod 755 /usr/local/bin/tvbox-* \
  && mkdir -p /state /home/tv/terminalvalues && chmod 1777 /state
 
-ENV HOME=/state/home
+ENV HOME=/state/home \
+    PASSAGE_DIR=/state/secrets \
+    PASSAGE_IDENTITIES_FILE=/state/home/.passage/identities \
+    UV_PROJECT_ENVIRONMENT=/state/venv
 ENTRYPOINT ["/usr/local/bin/tvbox-init"]

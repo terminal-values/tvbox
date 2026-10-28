@@ -1,0 +1,17 @@
+#!/bin/sh
+# tv import-key < file: bring in an age key saved from another machine.
+# Refuses to replace a different key already here.
+set -u
+ids=$HOME/.passage/identities
+mkdir -p "$HOME/.passage" && chmod 700 "$HOME/.passage"
+cat > "$ids.new" && chmod 600 "$ids.new"
+if ! pub=$(age-keygen -y "$ids.new" 2>/dev/null); then
+    rm -f "$ids.new"; echo "That isn't an age key file." >&2; exit 2
+fi
+if [ -s "$ids" ] && [ "$(age-keygen -y "$ids")" != "$pub" ]; then
+    rm -f "$ids.new"
+    echo "This box already has a different age key; not replacing it." >&2
+    exit 1
+fi
+mv "$ids.new" "$ids"
+echo "Your age key is in the box: $pub"

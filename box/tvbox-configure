@@ -1,0 +1,53 @@
+#!/bin/sh
+# Sets up the box for the member, at every start (each step is idempotent):
+# Syncthing's settings, the folder's ignore rules, and ssh to tvhome.
+set -u
+. /etc/tvbox/tvhome.env
+INSIDE=/home/tv/terminalvalues
+ST=/state/syncthing
+cli() { syncthing cli --home="$ST" "$@"; }
+
+# Only TV's data syncs; code and instructions come by git.
+cp /etc/tvbox/stignore "$INSIDE/.stignore"
+
+# ssh (and so git) reaches tvhome through Tailscale, as the member.
+if [ -n "${TV_LOGIN:-}" ]; then
+    mkdir -p "$HOME/.ssh" && chmod 700 "$HOME/.ssh"
+    cat > "$HOME/.ssh/config" <<EOF
+# Written by tvbox-configure at each start.
+Host tvhome tvhome.*
+    HostName $TVHOME_HOST
+    User $TV_LOGIN
+    ProxyCommand tailscale nc %h %p
+    StrictHostKeyChecking accept-new
+EOF
+fi
+
+# Wait for Syncthing's API.
+i=0
+until cli show system >/dev/null 2>&1; do
+    i=$((i + 1)); [ $i -gt 60 ] && { echo "tvbox-configure: Syncthing never answered" >&2; exit 1; }
+    sleep 1
+done
+
+# No discovery and no relays: the box talks only to tvhome, over the tailnet.
+cli config options global-ann-enabled set false
+cli config options local-ann-enabled set false
+cli config options relays-enabled set false
+cli config options natenabled set false
+cli config options uraccepted set -- -1
+cli config options raw-listen-addresses set tcp://127.0.0.1:22000
+
+if [ -n "$TVHOME_SYNCTHING_ID" ]; then
+    # As JSON: Syncthing 1.29's `devices add --addresses` crashes.
+    cli config devices list | grep -qx "$TVHOME_SYNCTHING_ID" ||
+        cli config devices add-json "{\"deviceID\":\"$TVHOME_SYNCTHING_ID\",\"name\":\"tvhome\",\"addresses\":[\"tcp://$TVHOME_HOST:22000\"]}"
+fi
+cli config folders list | grep -qx terminalvalues ||
+    cli config folders add --id terminalvalues --label "Terminal Values" --path "$INSIDE"
+cli config folders terminalvalues ignore-perms set true
+cli config folders terminalvalues rescan-intervals set 60
+if [ -n "$TVHOME_SYNCTHING_ID" ]; then
+    cli config folders terminalvalues devices list | grep -qx "$TVHOME_SYNCTHING_ID" ||
+        cli config folders terminalvalues devices add --device-id "$TVHOME_SYNCTHING_ID"
+fi
