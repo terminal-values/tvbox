@@ -94,3 +94,25 @@ def test_tv_folder_prints_the_folder(home):
     r = subprocess.run(["sh", str(ROOT / "tv"), "folder"], env=env(home),
                        capture_output=True, text=True)
     assert r.stdout.strip() == f"{home}/Terminal Values"
+
+
+def test_fetches_from_github_with_urls_curl_accepts(home, tmp_path):
+    """Without TVBOX_SOURCE it fetches by URL; a space in one makes curl refuse it."""
+    bin_ = tmp_path / "fakebin"
+    bin_.mkdir()
+    log = tmp_path / "urls"
+    curl = bin_ / "curl"
+    curl.write_text(f"""#!/bin/sh
+for a; do url=$a; done
+for a; do case $prev in -o) out=$a ;; esac; prev=$a; done
+echo "$url" >> {log}
+case $url in *" "*) exit 3 ;; esac
+path=$(printf '%s' "${{url#https://raw.githubusercontent.com/terminal-values/tvbox/main/}}" | sed 's/%20/ /g')
+cp "{ROOT}/$path" "$out"
+""")
+    curl.chmod(0o755)
+    e = env(home, path=f"{bin_}:/usr/bin:/bin")
+    del e["TVBOX_SOURCE"]
+    r = subprocess.run(["sh", str(ROOT / "install.sh")], env=e, capture_output=True, text=True)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert all(" " not in u for u in log.read_text().splitlines())

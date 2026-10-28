@@ -13,7 +13,7 @@ BIN=$HOME/.local/bin
 
 fetch() {  # fetch PATH-IN-REPO DEST
     if [ -n "${TVBOX_SOURCE:-}" ]; then cp "$TVBOX_SOURCE/$1" "$2"
-    else curl -fsSL "$BASE/$1" -o "$2"; fi
+    else curl -fsSL "$BASE/$(printf '%s' "$1" | sed 's/ /%20/g')" -o "$2"; fi
 }
 
 mkdir -p "$BIN"
