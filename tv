@@ -300,7 +300,7 @@ cmd_pages() {
 cmd_import_key() {
     need_box
     [ -t 0 ] && die 2 "Send the key file in: tv import-key < where-you-saved-it"
-    in_box tvbox-import-key
+    in_box tvbox-import-key "$@"
 }
 
 cmd_export_key() {
@@ -431,7 +431,7 @@ case $cmd in
     run) need_box; in_box "$@" ;;
     shell) need_box; in_box bash -l ;;
     pages) cmd_pages ;;
-    import-key) cmd_import_key ;;
+    import-key) cmd_import_key "$@" ;;
     export-key) cmd_export_key ;;
     folder) need_config; say "$FOLDER" ;;
     check) cmd_check ;;

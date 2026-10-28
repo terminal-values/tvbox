@@ -113,6 +113,18 @@ if [ $? -ne 0 ] && ! inbox test -e /state/home/.passage/identities; then
 else
     fail "join with a bad key: $out"
 fi
+# import-key keeps an existing key unless told to replace it (a second
+# computer brings in the member's saved key over the one join made).
+inbox sh -c 'age-keygen -o /tmp/k1 2>/dev/null; age-keygen -o /tmp/k2 2>/dev/null'
+inbox sh -c 'tvbox-import-key < /tmp/k1' >/dev/null 2>&1
+if ! inbox sh -c 'tvbox-import-key < /tmp/k2' >/dev/null 2>&1 &&
+   inbox sh -c 'tvbox-import-key --replace < /tmp/k2' >/dev/null 2>&1 &&
+   [ "$(inbox sh -c 'age-keygen -y /state/home/.passage/identities')" = "$(inbox sh -c 'age-keygen -y /tmp/k2')" ]; then
+    ok "import-key replaces a key only with --replace"
+else
+    fail "import-key --replace doesn't behave"
+fi
+
 # Stopping the box stops its daemons properly, so tvhome sees Syncthing
 # hang up instead of waiting on a dead connection.
 $RT stop "$NAME" >/dev/null 2>&1
