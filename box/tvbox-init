@@ -1,0 +1,4 @@
+#!/bin/sh
+# The box's first process.
+mkdir -p "$HOME"
+exec sleep infinity
