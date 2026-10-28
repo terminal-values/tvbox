@@ -1,5 +1,5 @@
 #!/bin/sh
 # Hands port 8484 (published on the computer's 127.0.0.1 only) to tvhome's
 # pages, which are plain TCP on port 8080 inside TV's tailnet.
-. /etc/tvbox/tvhome.env
+. /state/tvhome.env
 exec socat TCP-LISTEN:8484,fork,reuseaddr EXEC:"tailscale nc $TVHOME_HOST 8080"

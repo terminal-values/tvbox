@@ -30,6 +30,7 @@ TVHOME_ID=$($RT run --rm --entrypoint sh "$IMAGE" -c \
 [ "$RT" = container ] && $RT volume create "$VOL" >/dev/null 2>&1
 $RT run -d --name "$NAME" -v "$FOLDER:/home/tv/terminalvalues" -v "$VOL:/state" \
     -e "TV_UID=$U" -e "TV_GID=$G" -e TV_LOGIN=tvtest \
+    -e TVHOME_HOST=tvhome.example-tailnet.ts.net \
     -e "TVHOME_SYNCTHING_ID=$TVHOME_ID" "$IMAGE" >/dev/null || { fail "the box doesn't start"; exit 1; }
 
 # Wait for Syncthing to have written its config.

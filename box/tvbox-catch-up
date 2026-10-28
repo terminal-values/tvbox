@@ -4,7 +4,7 @@
 # then hands over to the folder's own bin/tv-catch-up, which shows code
 # changes before applying them.
 set -eu
-. /etc/tvbox/tvhome.env
+. /state/tvhome.env
 INSIDE=/home/tv/terminalvalues
 login=${TV_LOGIN:?the box doesn't know your login; run tv join}
 cd "$INSIDE"

@@ -16,7 +16,7 @@ DEFAULT_IMAGE=$REGISTRY:latest
 GITHUB=https://api.github.com/repos/terminal-values/tvbox
 CONFIG=${TV_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/tv/config}
 
-FOLDER= IMAGE= LOGIN= RUNTIME= REVISION=
+FOLDER= IMAGE= LOGIN= RUNTIME= REVISION= TAILNET= TVHOME_ID=
 # shellcheck disable=SC1090
 [ -r "$CONFIG" ] && . "$CONFIG"
 IMAGE=${IMAGE:-$DEFAULT_IMAGE}
@@ -84,6 +84,7 @@ create_box() {
         -v "$FOLDER:$INSIDE" -v "$VOLUME:/state" \
         -p "127.0.0.1:$PORT:$PORT" \
         -e "TV_UID=$UID_IN" -e "TV_GID=$GID_IN" -e "TV_LOGIN=$LOGIN" \
+        -e "TVHOME_HOST=tvhome.$TAILNET" -e "TVHOME_SYNCTHING_ID=$TVHOME_ID" \
         "$IMAGE" >/dev/null || die 1 "The box wouldn't start (see above)."
 }
 
@@ -112,6 +113,8 @@ write_config() {
         say "LOGIN=$(quote "$LOGIN")"
         say "RUNTIME=$(quote "$RT")"
         say "REVISION=$(quote "$REVISION")"
+        say "TAILNET=$(quote "$TAILNET")"
+        say "TVHOME_ID=$(quote "$TVHOME_ID")"
     } > "$CONFIG.tmp" && mv -f "$CONFIG.tmp" "$CONFIG"
 }
 
@@ -174,21 +177,35 @@ cmd_join() {
         die 2 "$folder already has files in it, and isn't a TV folder. Pick another
 with --folder, or use it anyway with: tv join --adopt --folder $folder"
     fi
+    # The invitation Danny sends: tvjoin:TAILNET:TVHOME-SYNCTHING-ID:KEY.
+    # It's the only place the box learns where TV's tailnet is, and the key
+    # in it goes to the box and nowhere else.
+    if [ -t 0 ]; then
+        printf 'The invitation Danny sent you (it starts tvjoin:): '
+        stty -echo 2>/dev/null; read -r invite; stty echo 2>/dev/null; echo
+    else
+        read -r invite || invite=
+    fi
+    old_ifs=$IFS; IFS=:
+    # shellcheck disable=SC2086
+    set -- $invite
+    IFS=$old_ifs
+    [ $# -eq 4 ] && [ "$1" = tvjoin ] && [ -n "$2" ] && [ -n "$3" ] &&
+        case $4 in tskey-*) true ;; *) false ;; esac ||
+        die 2 "That isn't a whole invitation: it's one line, starting tvjoin:, as Danny sent it."
+    tailnet=$2 tvhome_id=$3 key=$4
     runtime_up
     mkdir -p "$folder" || die 1 "Couldn't make $folder."
-    FOLDER=$(cd "$folder" && pwd) LOGIN=$login
+    FOLDER=$(cd "$folder" && pwd) LOGIN=$login TAILNET=$tailnet TVHOME_ID=$tvhome_id
     [ "$IMAGE" = "$DEFAULT_IMAGE" ] && pin_latest
     write_config
-    if [ -t 0 ]; then
-        printf 'The key Danny sent you (it starts tskey-): '
-        stty -echo 2>/dev/null; read -r key; stty echo 2>/dev/null; echo
-    else
-        read -r key || key=
+    # A box made before this join may know another tailnet: make it afresh
+    # (its storage, and so any age key, is kept).
+    if [ "$(box_state)" != absent ]; then
+        "$RT" stop "$BOX" >/dev/null 2>&1
+        "$RT" rm "$BOX" >/dev/null 2>&1
     fi
-    case $(box_state) in
-        absent) create_box ;;
-        stopped) "$RT" start "$BOX" >/dev/null ;;
-    esac
+    create_box
     printf '%s\n' "$key" | in_box tvbox-join "$LOGIN"
 }
 

@@ -4,7 +4,7 @@
 # Safe to run again: a failed login leaves nothing behind, and an existing
 # age key is kept.
 set -u
-. /etc/tvbox/tvhome.env
+. /state/tvhome.env
 login=${1:?usage: tvbox-join LOGIN}
 read -r key || key=
 [ -n "$key" ] || { echo "tvbox-join: no auth key given (it starts tskey-)" >&2; exit 2; }

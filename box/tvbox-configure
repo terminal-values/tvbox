@@ -2,7 +2,7 @@
 # Sets up the box for the member, at every start (each step is idempotent):
 # Syncthing's settings, the folder's ignore rules, and ssh to tvhome.
 set -u
-. /etc/tvbox/tvhome.env
+. /state/tvhome.env
 INSIDE=/home/tv/terminalvalues
 ST=/state/syncthing
 cli() { syncthing cli --home="$ST" "$@"; }

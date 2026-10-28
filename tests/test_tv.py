@@ -12,6 +12,8 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
+STID = "MVOEDBP-QTCGNI7-Q6ZZW22-HCGLNE5-5EQZ4NS-5USUULU-D7EIS4I-J2Q3EQX"
+INVITE = f"tvjoin:example-tailnet.ts.net:{STID}:tskey-auth-x-y\n"
 TV = ROOT / "tv"
 FAKE = Path(__file__).resolve().parent / "fakeruntime"
 TOOLS = ["sh", "env", "python3", "id", "mkdir", "cat", "sed", "grep", "ls",
@@ -46,6 +48,8 @@ class Box:
         kw.setdefault("FOLDER", str(self.home / "terminalvalues"))
         kw.setdefault("IMAGE", "ghcr.io/terminal-values/tvbox@sha256:abc")
         kw.setdefault("LOGIN", "sam")
+        kw.setdefault("TAILNET", "example-tailnet.ts.net")
+        kw.setdefault("TVHOME_ID", STID)
         self.config.write_text("".join(f"{k}='{v}'\n" for k, v in kw.items()))
 
     def tv(self, *args, input="", **env):
@@ -105,6 +109,8 @@ def test_start_args_quote_spaces(box):
     assert "127.0.0.1:8484:8484" in run
     assert "--name" in run and run[run.index("--name") + 1] == "tvbox"
     assert run[-1] == "ghcr.io/terminal-values/tvbox@sha256:abc"
+    assert "TVHOME_HOST=tvhome.example-tailnet.ts.net" in run
+    assert f"TVHOME_SYNCTHING_ID={STID}" in run
 
 
 def test_start_existing_box_starts_it(box):
@@ -168,7 +174,7 @@ def test_join_refuses_foreign_folder(box):
     folder = box.home / "stuff"
     folder.mkdir()
     (folder / "notes.txt").write_text("mine")
-    r = box.tv("join", "--login", "sam", "--folder", str(folder), input="tskey-auth-x\n")
+    r = box.tv("join", "--login", "sam", "--folder", str(folder), input=INVITE)
     assert r.returncode == 2
     assert "--adopt" in r.stdout + r.stderr
     assert not [c for c in box.calls() if c[1] == "run"]
@@ -180,25 +186,28 @@ def test_join_adopts_when_asked(box):
     folder.mkdir()
     (folder / "notes.txt").write_text("mine")
     r = box.tv("join", "--login", "sam", "--folder", str(folder), "--adopt",
-               input="tskey-auth-x\n")
+               input=INVITE)
     assert r.returncode == 0, r.stdout + r.stderr
     assert f"{folder}:/home/tv/terminalvalues" in box.call("run")
 
 
 def test_join_makes_a_missing_folder_and_writes_config(box):
     box.runtimes("docker")
-    r = box.tv("join", "--login", "sam", input="tskey-auth-x\n")
+    r = box.tv("join", "--login", "sam", input=INVITE)
     assert r.returncode == 0, r.stdout + r.stderr
     assert (box.home / "terminalvalues").is_dir()
     text = box.config.read_text()
     assert "LOGIN='sam'" in text and f"FOLDER='{box.home / 'terminalvalues'}'" in text
+    assert "TAILNET='example-tailnet.ts.net'" in text and f"TVHOME_ID='{STID}'" in text
+    assert "tskey" not in text
+    assert "TVHOME_HOST=tvhome.example-tailnet.ts.net" in box.call("run")
     ex = box.call("exec")
     assert ex[-2:] == ["tvbox-join", "sam"] and "-i" in ex
 
 
 def test_join_checks_the_login(box):
     box.runtimes("docker")
-    r = box.tv("join", "--login", "Sam Smith", input="tskey-auth-x\n")
+    r = box.tv("join", "--login", "Sam Smith", input=INVITE)
     assert r.returncode == 2
     assert not box.calls() or not [c for c in box.calls() if c[1] == "run"]
 
@@ -247,3 +256,12 @@ def test_update_when_current(box):
     assert r.returncode == 0
     assert "up to date" in r.stdout
     assert not [c for c in box.calls() if c[1] in ("rm", "run")]
+
+
+@pytest.mark.parametrize("bad", ["tskey-auth-x-y\n", "tvjoin:example-tailnet.ts.net:tskey-auth-x\n", "\n"])
+def test_join_wants_the_whole_invitation(box, bad):
+    box.runtimes("docker")
+    r = box.tv("join", "--login", "sam", input=bad)
+    assert r.returncode == 2
+    assert "invitation" in r.stdout + r.stderr
+    assert not [c for c in box.calls() if c[1] == "run"]

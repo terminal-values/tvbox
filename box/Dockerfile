@@ -32,7 +32,7 @@ COPY --from=uv /uv /uvx /usr/local/bin/
 
 COPY tvbox-init tvbox-configure tvbox-join tvbox-status tvbox-pages \
      tvbox-catch-up tvbox-push tvbox-import-key /usr/local/bin/
-COPY tvhome.env stignore /etc/tvbox/
+COPY stignore /etc/tvbox/
 RUN chmod 755 /usr/local/bin/tvbox-* \
  && mkdir -p /state /home/tv/terminalvalues && chmod 1777 /state
 
