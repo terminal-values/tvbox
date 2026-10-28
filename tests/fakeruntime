@@ -1,0 +1,37 @@
+#!/usr/bin/env python3
+"""Stands in for container, docker or podman in tv's tests.
+
+Appends each invocation's argv (as JSON, with the name it was called by
+first) to $FAKE_LOG. Behaviour:
+  FAKE_DOWN=1          the runtime's service isn't running
+  FAKE_STATE=...       the box is running, stopped or absent (default absent)
+"""
+import json
+import os
+import sys
+
+name = os.path.basename(sys.argv[0])
+args = sys.argv[1:]
+with open(os.environ["FAKE_LOG"], "a") as log:
+    log.write(json.dumps([name] + args) + "\n")
+
+down = os.environ.get("FAKE_DOWN") == "1"
+state = os.environ.get("FAKE_STATE", "absent")
+verb = args[0] if args else ""
+
+if verb in ("info",) or args[:2] == ["system", "status"]:
+    sys.exit(1 if down else 0)
+if down:
+    print("Cannot connect to the runtime", file=sys.stderr)
+    sys.exit(125)
+if verb == "inspect":
+    if state == "absent":
+        print("no such container", file=sys.stderr)
+        sys.exit(1)
+    running = state == "running"
+    if name == "container":
+        print(json.dumps([{"status": "running" if running else "stopped"}]))
+    else:
+        print("true" if running else "false")
+    sys.exit(0)
+sys.exit(0)

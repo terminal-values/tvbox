@@ -1,0 +1,236 @@
+#!/bin/sh
+# tv: Terminal Values' box, from the member's own computer.
+#
+# The TV folder is an ordinary folder here; the box (one container) mounts
+# it and does the syncing, the git, the secrets and TV's tools, so nothing
+# TV-specific is installed on this computer. tv works with Apple's
+# container, Docker or Podman, whichever is here. `tv help` lists commands.
+set -u
+
+BOX=tvbox
+VOLUME=tv-state
+INSIDE=/home/tv/terminalvalues
+PORT=8484
+DEFAULT_IMAGE=ghcr.io/terminal-values/tvbox:latest
+CONFIG=${TV_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/tv/config}
+
+FOLDER= IMAGE= LOGIN= RUNTIME=
+# shellcheck disable=SC1090
+[ -r "$CONFIG" ] && . "$CONFIG"
+IMAGE=${IMAGE:-$DEFAULT_IMAGE}
+
+say() { printf '%s\n' "$*"; }
+die() { code=$1; shift; printf '%s\n' "$*" >&2; exit "$code"; }
+
+# --- the runtime -----------------------------------------------------------
+
+find_runtime() {
+    RT=${TV_RUNTIME:-$RUNTIME}
+    if [ -n "$RT" ] && command -v "$RT" >/dev/null 2>&1; then :; else
+        RT=
+        for r in container docker podman; do
+            if command -v "$r" >/dev/null 2>&1; then RT=$r; break; fi
+        done
+    fi
+    [ -n "$RT" ] || die 4 "No container runtime found. Install one first: on a Mac,
+Apple's container (https://github.com/apple/container/releases); on Linux,
+sudo apt install podman."
+    # Rootless Podman's root is already you; elsewhere the box runs as you.
+    if [ "$RT" = podman ]; then UID_IN=0 GID_IN=0
+    else UID_IN=$(id -u) GID_IN=$(id -g); fi
+}
+
+runtime_up() {
+    find_runtime
+    case $RT in
+        container) container system status >/dev/null 2>&1 ||
+            die 4 "Apple's container service isn't running. Start it with: container system start" ;;
+        docker) docker info >/dev/null 2>&1 ||
+            die 4 "Docker isn't running. Open Docker Desktop (or start colima), then try again." ;;
+        podman) podman info >/dev/null 2>&1 ||
+            die 4 "Podman isn't answering. On a Mac, start it with: podman machine start" ;;
+    esac
+}
+
+# running, stopped or absent
+box_state() {
+    case $RT in
+        container)
+            out=$(container inspect "$BOX" 2>/dev/null) || { say absent; return; }
+            case $out in *'"running"'*) say running ;; *) say stopped ;; esac ;;
+        *)
+            out=$("$RT" inspect -f '{{.State.Running}}' "$BOX" 2>/dev/null) || { say absent; return; }
+            [ "$out" = true ] && say running || say stopped ;;
+    esac
+}
+
+need_config() {
+    [ -n "$FOLDER" ] && [ -n "$LOGIN" ] || die 2 "This computer hasn't joined TV yet: run tv join first."
+}
+
+create_box() {
+    need_config
+    if [ "$RT" = container ]; then
+        container volume inspect "$VOLUME" >/dev/null 2>&1 ||
+            container volume create "$VOLUME" >/dev/null
+    fi
+    "$RT" run -d --name "$BOX" \
+        -v "$FOLDER:$INSIDE" -v "$VOLUME:/state" \
+        -p "127.0.0.1:$PORT:$PORT" \
+        -e "TV_UID=$UID_IN" -e "TV_GID=$GID_IN" -e "TV_LOGIN=$LOGIN" \
+        "$IMAGE" >/dev/null || die 1 "The box wouldn't start (see above)."
+}
+
+need_box() {
+    runtime_up
+    [ "$(box_state)" = running ] || die 3 "The box isn't running. Start it with: tv start"
+}
+
+# Run a command in the box, in the TV folder, as you.
+in_box() {
+    if [ -t 0 ] && [ -t 1 ]; then tty=-t; else tty=; fi
+    # shellcheck disable=SC2086
+    "$RT" exec -i $tty -u "$UID_IN:$GID_IN" -w "$INSIDE" "$BOX" "$@"
+}
+
+# --- config ----------------------------------------------------------------
+
+quote() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
+
+write_config() {
+    mkdir -p "$(dirname "$CONFIG")"
+    {
+        say "# tv's settings for this computer; tv join writes them."
+        say "FOLDER=$(quote "$FOLDER")"
+        say "IMAGE=$(quote "$IMAGE")"
+        say "LOGIN=$(quote "$LOGIN")"
+        say "RUNTIME=$(quote "$RT")"
+    } > "$CONFIG.tmp" && mv -f "$CONFIG.tmp" "$CONFIG"
+}
+
+# --- commands --------------------------------------------------------------
+
+cmd_join() {
+    login= folder= adopt=no
+    while [ $# -gt 0 ]; do
+        case $1 in
+            --login) login=${2:-}; shift ;;
+            --folder) folder=${2:-}; shift ;;
+            --adopt) adopt=yes ;;
+            *) die 2 "tv join: unknown option $1" ;;
+        esac
+        shift
+    done
+    if [ -z "$login" ]; then
+        printf 'The login name you picked: '
+        read -r login || die 2 "No login name given."
+    fi
+    printf '%s\n' "$login" | grep -Eq '^[a-z][a-z0-9-]{0,31}$' ||
+        die 2 "'$login' won't do as a login: short, lowercase letters, digits and dashes, starting with a letter."
+    folder=${folder:-$HOME/terminalvalues}
+    if [ -d "$folder" ] && [ -n "$(ls -A "$folder")" ] && [ ! -e "$folder/.git" ] &&
+       [ "$adopt" = no ]; then
+        die 2 "$folder already has files in it, and isn't a TV folder. Pick another
+with --folder, or use it anyway with: tv join --adopt --folder $folder"
+    fi
+    runtime_up
+    mkdir -p "$folder" || die 1 "Couldn't make $folder."
+    FOLDER=$(cd "$folder" && pwd) LOGIN=$login
+    write_config
+    if [ -t 0 ]; then
+        printf 'The key Danny sent you (it starts tskey-): '
+        stty -echo 2>/dev/null; read -r key; stty echo 2>/dev/null; echo
+    else
+        read -r key || key=
+    fi
+    case $(box_state) in
+        absent) create_box ;;
+        stopped) "$RT" start "$BOX" >/dev/null ;;
+    esac
+    printf '%s\n' "$key" | in_box tvbox-join "$LOGIN"
+}
+
+cmd_start() {
+    runtime_up
+    case $(box_state) in
+        running) say "The box is already running." ; return ;;
+        stopped) "$RT" start "$BOX" >/dev/null || die 1 "The box wouldn't start (see above)." ;;
+        absent) create_box ;;
+    esac
+    say "The box is running; TV's documents sync while it runs. tv stop stops it."
+}
+
+cmd_stop() {
+    runtime_up
+    [ "$(box_state)" = running ] && "$RT" stop "$BOX" >/dev/null
+    say "The box is stopped: documents won't sync until you run tv start."
+}
+
+cmd_status() {
+    runtime_up
+    if [ "$(box_state)" != running ]; then
+        say "The box is not running, so your changes are not syncing. Start it with: tv start"
+        exit 3
+    fi
+    in_box tvbox-status
+}
+
+cmd_pages() {
+    need_box
+    url=http://127.0.0.1:$PORT/
+    if command -v open >/dev/null 2>&1; then open "$url"
+    elif command -v xdg-open >/dev/null 2>&1; then xdg-open "$url"
+    else say "TV's pages: $url"; fi
+}
+
+cmd_import_key() {
+    need_box
+    [ -t 0 ] && die 2 "Send the key file in: tv import-key < where-you-saved-it"
+    in_box tvbox-import-key
+}
+
+cmd_export_key() {
+    need_box
+    [ -t 1 ] && die 2 "This writes out your secret key, so send it to a file, not the screen:
+tv export-key > somewhere-safe/tv-age-key.txt"
+    in_box cat /state/home/.passage/identities
+}
+
+usage() {
+    cat <<'EOF'
+tv: Terminal Values' box.
+
+  tv join        join TV from this computer (once)
+  tv start       start the box; documents sync while it runs
+  tv stop        stop it
+  tv status      is it running, on the tailnet, syncing?
+  tv catch-up    bring the code and secrets up to date, showing code changes first
+  tv push        send your code commits and the secrets to tvhome
+  tv git ...     git, in the TV folder, in the box
+  tv passage ... TV's shared secrets
+  tv pages       open TV's internal pages in your browser
+  tv shell       a shell in the box, in the TV folder
+  tv import-key  bring in your saved age key (tv import-key < file)
+  tv export-key  save a copy of your age key (tv export-key > file)
+  tv update      get a newer box, showing what changed first
+  tv uninstall   remove the box and tv
+EOF
+}
+
+cmd=${1:-help}
+[ $# -gt 0 ] && shift
+case $cmd in
+    join) cmd_join "$@" ;;
+    start) cmd_start ;;
+    stop) cmd_stop ;;
+    status) cmd_status ;;
+    catch-up) need_box; in_box tvbox-catch-up ;;
+    push) need_box; in_box tvbox-push ;;
+    git|passage) need_box; in_box "$cmd" "$@" ;;
+    shell) need_box; in_box bash -l ;;
+    pages) cmd_pages ;;
+    import-key) cmd_import_key ;;
+    export-key) cmd_export_key ;;
+    help|-h|--help) usage ;;
+    *) usage >&2; exit 2 ;;
+esac

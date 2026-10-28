@@ -1,0 +1,210 @@
+"""Tests for tv, the host-side command, against a fake container runtime.
+
+tv runs with a PATH holding only the fake runtimes it's given and the
+ordinary tools it needs, so what's installed on the test machine doesn't
+leak in."""
+import json
+import os
+import shutil
+import subprocess
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parent.parent
+TV = ROOT / "tv"
+FAKE = Path(__file__).resolve().parent / "fakeruntime"
+TOOLS = ["sh", "env", "python3", "id", "mkdir", "cat", "sed", "grep", "ls",
+         "uname", "mv", "rm", "tr", "dirname", "head", "chmod", "basename"]
+
+
+@pytest.fixture
+def box(tmp_path):
+    return Box(tmp_path)
+
+
+class Box:
+    def __init__(self, tmp):
+        self.tmp = tmp
+        self.home = tmp / "home"
+        self.home.mkdir()
+        self.bin = tmp / "bin"
+        self.bin.mkdir()
+        for tool in TOOLS:
+            real = shutil.which(tool)
+            if real:
+                (self.bin / tool).symlink_to(real)
+        self.log = tmp / "log"
+        self.log.touch()
+        self.config = tmp / "config"
+
+    def runtimes(self, *names):
+        for n in names:
+            (self.bin / n).symlink_to(FAKE)
+
+    def configure(self, **kw):
+        kw.setdefault("FOLDER", str(self.home / "terminalvalues"))
+        kw.setdefault("IMAGE", "ghcr.io/terminal-values/tvbox@sha256:abc")
+        kw.setdefault("LOGIN", "sam")
+        self.config.write_text("".join(f"{k}='{v}'\n" for k, v in kw.items()))
+
+    def tv(self, *args, input="", **env):
+        e = {"PATH": str(self.bin), "HOME": str(self.home), "TV_CONFIG": str(self.config),
+             "FAKE_LOG": str(self.log), "SHELL": "/bin/zsh"}
+        e.update(env)
+        return subprocess.run(["sh", str(TV), *args], input=input, capture_output=True,
+                              text=True, env=e)
+
+    def calls(self):
+        return [json.loads(line) for line in self.log.read_text().splitlines()]
+
+    def call(self, verb):
+        """The first logged call whose verb (first argument) is verb."""
+        return next(c for c in self.calls() if len(c) > 1 and c[1] == verb)
+
+
+def test_detects_runtime_in_order(box):
+    box.runtimes("docker")
+    box.configure()
+    box.tv("start")
+    assert box.calls()[0][0] == "docker"
+
+
+def test_prefers_apples_container(box):
+    box.runtimes("container", "docker")
+    box.configure()
+    box.tv("start")
+    assert {c[0] for c in box.calls()} == {"container"}
+
+
+def test_no_runtime_at_all(box):
+    box.configure()
+    r = box.tv("start")
+    assert r.returncode == 4
+    assert "container runtime" in r.stdout + r.stderr
+
+
+@pytest.mark.parametrize("runtime,hint", [("container", "container system start"),
+                                          ("docker", "Docker Desktop")])
+def test_runtime_not_running(box, runtime, hint):
+    box.runtimes(runtime)
+    box.configure()
+    r = box.tv("start", FAKE_DOWN="1")
+    assert r.returncode == 4
+    assert hint in r.stdout + r.stderr
+
+
+def test_start_args_quote_spaces(box):
+    box.runtimes("docker")
+    folder = box.home / "Terminal Values"
+    box.configure(FOLDER=str(folder))
+    box.tv("start")
+    run = box.call("run")
+    assert f"{folder}:/home/tv/terminalvalues" in run
+    assert "tv-state:/state" in run
+    assert "127.0.0.1:8484:8484" in run
+    assert "--name" in run and run[run.index("--name") + 1] == "tvbox"
+    assert run[-1] == "ghcr.io/terminal-values/tvbox@sha256:abc"
+
+
+def test_start_existing_box_starts_it(box):
+    box.runtimes("docker")
+    box.configure()
+    box.tv("start", FAKE_STATE="stopped")
+    assert box.call("start")[2] == "tvbox"
+    assert not [c for c in box.calls() if c[1] == "run"]
+
+
+def test_runs_as_host_user(box):
+    box.runtimes("docker")
+    box.configure()
+    box.tv("start")
+    run = box.call("run")
+    assert f"TV_UID={os.getuid()}" in run and f"TV_GID={os.getgid()}" in run
+
+
+def test_rootless_podman_is_root_inside(box):
+    box.runtimes("podman")
+    box.configure()
+    box.tv("start")
+    assert "TV_UID=0" in box.call("run")
+
+
+def test_status_when_stopped(box):
+    box.runtimes("docker")
+    box.configure()
+    r = box.tv("status", FAKE_STATE="stopped")
+    assert r.returncode == 3
+    assert "not running" in r.stdout and "not syncing" in r.stdout
+
+
+def test_commands_need_a_running_box(box):
+    box.runtimes("docker")
+    box.configure()
+    r = box.tv("push", FAKE_STATE="stopped")
+    assert r.returncode == 3
+    assert "tv start" in r.stdout + r.stderr
+
+
+@pytest.mark.parametrize("args,inside", [
+    (["catch-up"], ["tvbox-catch-up"]),
+    (["push"], ["tvbox-push"]),
+    (["git", "status", "--short"], ["git", "status", "--short"]),
+    (["passage", "ls"], ["passage", "ls"]),
+])
+def test_commands_exec_in_box(box, args, inside):
+    box.runtimes("docker")
+    box.configure()
+    box.tv(*args, FAKE_STATE="running")
+    ex = box.call("exec")
+    assert ex[-len(inside):] == inside
+    assert ex[ex.index("-w") + 1] == "/home/tv/terminalvalues"
+    assert ex[ex.index("-u") + 1] == f"{os.getuid()}:{os.getgid()}"
+    assert "tvbox" in ex
+
+
+def test_join_refuses_foreign_folder(box):
+    box.runtimes("docker")
+    folder = box.home / "stuff"
+    folder.mkdir()
+    (folder / "notes.txt").write_text("mine")
+    r = box.tv("join", "--login", "sam", "--folder", str(folder), input="tskey-auth-x\n")
+    assert r.returncode == 2
+    assert "--adopt" in r.stdout + r.stderr
+    assert not [c for c in box.calls() if c[1] == "run"]
+
+
+def test_join_adopts_when_asked(box):
+    box.runtimes("docker")
+    folder = box.home / "stuff"
+    folder.mkdir()
+    (folder / "notes.txt").write_text("mine")
+    r = box.tv("join", "--login", "sam", "--folder", str(folder), "--adopt",
+               input="tskey-auth-x\n")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert f"{folder}:/home/tv/terminalvalues" in box.call("run")
+
+
+def test_join_makes_a_missing_folder_and_writes_config(box):
+    box.runtimes("docker")
+    r = box.tv("join", "--login", "sam", input="tskey-auth-x\n")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert (box.home / "terminalvalues").is_dir()
+    text = box.config.read_text()
+    assert "LOGIN='sam'" in text and f"FOLDER='{box.home / 'terminalvalues'}'" in text
+    ex = box.call("exec")
+    assert ex[-2:] == ["tvbox-join", "sam"] and "-i" in ex
+
+
+def test_join_checks_the_login(box):
+    box.runtimes("docker")
+    r = box.tv("join", "--login", "Sam Smith", input="tskey-auth-x\n")
+    assert r.returncode == 2
+    assert not box.calls() or not [c for c in box.calls() if c[1] == "run"]
+
+
+def test_export_key_refuses_a_terminal(box):
+    box.runtimes("docker")
+    box.configure()
+    # Not a tty in tests, so it would export; check the guard is in the script.
+    assert "[ -t 1 ]" in TV.read_text()

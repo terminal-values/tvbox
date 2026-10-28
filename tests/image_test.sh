@@ -38,9 +38,11 @@ else
     fail "as uid 1234 it says '$got', want '1234 /state/home'"
 fi
 
-size=$($RT image inspect "$IMAGE" --format '{{.Size}}' 2>/dev/null ||
-       $RT image inspect "$IMAGE" 2>/dev/null | grep -o '"size": *[0-9]*' | head -1 | grep -o '[0-9]*$')
-if [ -n "$size" ] && [ "$size" -lt 600000000 ]; then
+# Apple's container doesn't report an unpacked size; Docker and Podman do.
+size=$($RT image inspect "$IMAGE" --format '{{.Size}}' 2>/dev/null)
+if [ -z "$size" ]; then
+    echo "skip: $RT doesn't report the image's size (check it with docker or podman)"
+elif [ "$size" -lt 600000000 ]; then
     ok "the image is $((size / 1000000)) MB"
 else
     fail "the image is ${size:-of unknown size} bytes, want under 600 MB"
