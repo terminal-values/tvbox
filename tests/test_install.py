@@ -103,7 +103,7 @@ def test_fetches_from_github_with_urls_curl_accepts(home, tmp_path):
     log = tmp_path / "urls"
     curl = bin_ / "curl"
     curl.write_text(f"""#!/bin/sh
-for a; do url=$a; done
+for a; do case $a in https://*) url=$a ;; esac; done
 for a; do case $prev in -o) out=$a ;; esac; prev=$a; done
 echo "$url" >> {log}
 case $url in *" "*) exit 3 ;; esac
