@@ -4,6 +4,22 @@ secrets
 __pycache__
 .pytest_cache
 .DS_Store
+// Agents' instructions, and files that run code when their folder is
+// opened, travel only by git, where tv catch-up shows them first.
+(?i)CLAUDE.md
+(?i)CLAUDE.local.md
+(?i)AGENTS.md
+(?i)AGENT.md
+(?i)GEMINI.md
+(?i).claude
+(?i).agents
+(?i).codex
+(?i).cursor
+(?i).cursorrules
+(?i).windsurfrules
+(?i).mcp.json
+(?i).envrc
+(?i).vscode
 !/doc
 !/www
 !/ledger

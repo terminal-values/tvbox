@@ -84,6 +84,26 @@ else
     fail "the ssh config is missing or wrong"
 fi
 
+# Syncthing itself ignores agents' instructions in a data directory, in any
+# case, but shares an ordinary document there.
+mkdir -p "$FOLDER/doc/.claude"
+echo note > "$FOLDER/doc/ok.md"; echo x > "$FOLDER/doc/CLAUDE.md"; echo x > "$FOLDER/doc/agents.MD"
+echo '{}' > "$FOLDER/doc/.mcp.json"; echo x > "$FOLDER/doc/.claude/settings.json"
+ignored=$(inbox sh -c '
+    key=$(sed -n "s:.*<apikey>\(.*\)</apikey>.*:\1:p" /state/syncthing/config.xml)
+    api() { curl -s -H "X-API-Key: $key" "$@"; }
+    api -X POST "http://127.0.0.1:8384/rest/db/scan?folder=terminalvalues" >/dev/null
+    i=0; until api "http://127.0.0.1:8384/rest/db/file?folder=terminalvalues&file=doc/ok.md" |
+        grep -q "\"ignored\": false" || [ $i -gt 30 ]; do i=$((i + 1)); sleep 1; done
+    for f in doc/ok.md doc/CLAUDE.md doc/agents.MD doc/.mcp.json doc/.claude/settings.json; do
+        if api "http://127.0.0.1:8384/rest/db/file?folder=terminalvalues&file=$f" | grep -q "\"ignored\": false"
+        then printf "%s=shared " "$f"; else printf "%s=not " "$f"; fi
+    done' 2>/dev/null)
+if [ "$ignored" = "doc/ok.md=shared doc/CLAUDE.md=not doc/agents.MD=not doc/.mcp.json=not doc/.claude/settings.json=not " ]; then
+    ok "Syncthing shares doc/ok.md but not agents' files"
+else
+    fail "Syncthing's view of agents' files: $ignored"
+fi
 # Every script in the box parses (dash is pickier than bash: an apostrophe
 # in ${VAR:?message} broke tvbox-catch-up).
 for f in $(inbox sh -c 'ls /usr/local/bin/tvbox-*'); do
