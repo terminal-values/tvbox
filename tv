@@ -193,12 +193,22 @@ changes() {  # changes FROM TO: one line per commit, its subject
         sed -n '/^  "commits": \[/,$ s/^ *"message": "\([^"\\]*\).*/  \1/p'
 }
 
-# Pin the newest published image, if GitHub and the registry answer.
+# The last few commits on main, newest first (each commit's own "sha" is
+# the one indented four spaces; its tree's and parents' are deeper).
+recent_revisions() {
+    curl -fsSL "$GITHUB/commits?sha=main&per_page=5" 2>/dev/null |
+        sed -n 's/^    "sha": "\([0-9a-f]*\)".*/\1/p'
+}
+
+# Pin the newest published image, if GitHub and the registry answer. That's
+# the newest commit's, or an earlier one's while its build is still running.
 pin_latest() {
     command -v curl >/dev/null 2>&1 || return 1
-    new=$(latest_revision); [ -n "$new" ] || return 1
-    digest=$(image_digest "$new"); [ -n "$digest" ] || return 1
-    IMAGE=$REGISTRY@$digest REVISION=$new
+    for rev in $(recent_revisions); do
+        digest=$(image_digest "$rev")
+        if [ -n "$digest" ]; then IMAGE=$REGISTRY@$digest REVISION=$rev; return 0; fi
+    done
+    return 1
 }
 
 # --- commands --------------------------------------------------------------

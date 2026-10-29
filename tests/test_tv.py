@@ -565,3 +565,17 @@ def test_move_takes_a_relative_path(box, tmp_path):
                        capture_output=True, text=True)
     assert r.returncode == 0, r.stdout + r.stderr
     assert f"FOLDER='{box.home}/Documents/tv'" in box.config.read_text()
+
+
+@pytest.mark.parametrize("unbuilt,digest,revision", [
+    ("", "newdigest", NEW), ("1", "olderdigest", "d" * 40)])
+def test_join_pins_the_newest_published_box(box, unbuilt, digest, revision):
+    # Found in the Linux run: joining while the newest commit's image was
+    # still building left the box unpinned, with no version recorded.
+    box.runtimes("podman")
+    (box.bin / "curl").symlink_to(FAKECURL)
+    r = box.tv("join", "--login", "sam", input=INVITE, FAKE_UNBUILT=unbuilt)
+    assert r.returncode == 0, r.stdout + r.stderr
+    text = box.config.read_text()
+    assert f"IMAGE='ghcr.io/terminal-values/tvbox@sha256:{digest}'" in text
+    assert f"REVISION='{revision}'" in text

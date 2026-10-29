@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 """Stands in for curl in tv update's tests: GitHub's API and ghcr.io.
 
-FAKE_NEW is the newest commit on main (default "new" * 8 hex-ish)."""
+FAKE_NEW is the newest commit on main (default "b" * 40); before it on main
+is "d" * 40, whose image is always published. FAKE_UNBUILT=1: the newest
+commit's image isn't published yet (its build is still running)."""
 import json
 import os
 import sys
 
 new = os.environ.get("FAKE_NEW", "b" * 40)
+older = "d" * 40
+unbuilt = os.environ.get("FAKE_UNBUILT") == "1"
 args = sys.argv[1:]
 url = next(a for a in reversed(args) if a.startswith("http"))
 head = "-I" in args or any(a.startswith("-") and "I" in a and not a.startswith("--") for a in args)
@@ -24,6 +28,10 @@ def emit(text):
 
 if url.endswith("/repos/terminal-values/tvbox/commits/main"):
     emit(json.dumps({"sha": new, "commit": {"message": "newest"}}, indent=2))
+elif "/repos/terminal-values/tvbox/commits?" in url:
+    emit(json.dumps([
+        {"sha": new, "commit": {"message": "newest", "tree": {"sha": "e" * 40}}, "parents": [{"sha": older}]},
+        {"sha": older, "commit": {"message": "older", "tree": {"sha": "f" * 40}}, "parents": []}], indent=2))
 elif "/repos/terminal-values/tvbox/compare/" in url:
     emit(json.dumps({
         "base_commit": {"sha": "a" * 40, "commit": {"message": "The commit this box is on"}},
@@ -33,8 +41,10 @@ elif "/repos/terminal-values/tvbox/compare/" in url:
         {"sha": new, "commit": {"message": "Fix tv status"}}]}, indent=2))
 elif url.startswith("https://ghcr.io/token"):
     emit(json.dumps({"token": "t"}))
-elif "/v2/terminal-values/tvbox/manifests/sha-" + new[:7] in url and head:
+elif "/v2/terminal-values/tvbox/manifests/sha-" + new[:7] in url and head and not unbuilt:
     emit("HTTP/2 200\r\ndocker-content-digest: sha256:newdigest\r\n\r\n")
+elif "/v2/terminal-values/tvbox/manifests/sha-" + older[:7] in url and head:
+    emit("HTTP/2 200\r\ndocker-content-digest: sha256:olderdigest\r\n\r\n")
 elif url.startswith("https://raw.githubusercontent.com/terminal-values/tvbox/"):
     emit("#!/bin/sh\necho new tv\n")
 else:
