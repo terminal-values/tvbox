@@ -6,8 +6,18 @@ set -u
 ST=${TVBOX_ST:-/state/syncthing}
 
 bad=0
-case $(tailscale status --json 2>/dev/null | jq -r '.BackendState // empty' 2>/dev/null) in
+ts=$(tailscale status --json 2>/dev/null)
+state=$(printf '%s' "$ts" | jq -r '.BackendState // empty' 2>/dev/null)
+# Running but not online: offline, or this box was taken off the tailnet.
+# Then Syncthing's connection to tvhome can only be a stale one.
+[ "$state" = Running ] && [ "$(printf '%s' "$ts" | jq -r '.Self.Online' 2>/dev/null)" = false ] &&
+    state=Offline
+case $state in
     Running) echo "On TV's tailnet." ;;
+    Offline)
+        echo "Not reaching TV's tailnet: this computer may be offline, or Danny may have removed this box."
+        echo "Documents aren't syncing."
+        exit 1 ;;
     NeedsLogin|NeedsMachineAuth)
         echo "Not on TV's tailnet: tv join, with a new invitation from Danny."; bad=1 ;;
     *)  echo "Connecting to TV's tailnet: the box has just started (or this computer is offline). Give it a minute."

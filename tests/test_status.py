@@ -19,7 +19,7 @@ cat "$FAKE_API/$(printf %s "$p" | tr / _)"
 """
 FAKE_TAILSCALE = """#!/bin/sh
 [ -n "$FAKE_TS" ] || exit 1
-printf '{"BackendState": "%s"}\\n' "$FAKE_TS"
+printf '{"BackendState": "%s", "Self": {"Online": %s}}\\n' "$FAKE_TS" "${FAKE_ONLINE:-true}"
 """
 
 
@@ -38,7 +38,7 @@ def status(tmp_path):
     api = tmp_path / "api"
     api.mkdir()
 
-    def run(ts="Running", connected=True, local=None, remote=None):
+    def run(ts="Running", connected=True, local=None, remote=None, online="true"):
         (api / "system_connections").write_text(json.dumps(
             {"connections": {TVHOME: {"connected": connected}}}))
         if local is not None:
@@ -46,7 +46,8 @@ def status(tmp_path):
         if remote is not None:
             (api / "db_completion").write_text(json.dumps(remote))
         env = {**os.environ, "PATH": f"{bin_}:{os.environ['PATH']}", "FAKE_API": str(api),
-               "FAKE_TS": ts or "", "TVBOX_ENV": str(env_file), "TVBOX_ST": str(st)}
+               "FAKE_TS": ts or "", "FAKE_ONLINE": online,
+               "TVBOX_ENV": str(env_file), "TVBOX_ST": str(st)}
         return subprocess.run(["sh", str(ROOT / "box" / "tvbox-status")], env=env,
                               capture_output=True, text=True)
     return run
@@ -106,3 +107,12 @@ def test_before_tvhome_has_sent_its_list_it_doesnt_claim_up_to_date(status):
     r = status(local={**DONE_LOCAL, "globalFiles": 0}, remote=DONE_REMOTE)
     assert "Up to date" not in r.stdout
     assert "Waiting for tvhome's list of TV's documents" in r.stdout
+
+
+def test_a_box_off_the_tailnet_doesnt_trust_a_stale_connection(status):
+    # Found removing tvlinux: its box still said "On TV's tailnet. Up to date"
+    # minutes later. Tailscale knew it was offline; Syncthing hadn't noticed.
+    r = status(online="false", local=DONE_LOCAL, remote=DONE_REMOTE)
+    assert r.returncode == 1
+    assert "On TV's tailnet" not in r.stdout and "Up to date" not in r.stdout
+    assert "removed" in r.stdout and "offline" in r.stdout
