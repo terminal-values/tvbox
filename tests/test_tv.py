@@ -16,6 +16,8 @@ STID = "MVOEDBP-QTCGNI7-Q6ZZW22-HCGLNE5-5EQZ4NS-5USUULU-D7EIS4I-J2Q3EQX"
 INVITE = f"tvjoin:example-tailnet.ts.net:{STID}:tskey-auth-x-y\n"
 TV = ROOT / "tv"
 FAKE = Path(__file__).resolve().parent / "fakeruntime"
+# dash, Debian's sh and the strictest about POSIX, when this machine has it.
+SH = shutil.which("dash") or "sh"
 TOOLS = ["sh", "env", "python3", "id", "mkdir", "cat", "sed", "grep", "ls",
          "uname", "mv", "rm", "rmdir", "tr", "dirname", "head", "chmod", "basename"]
 
@@ -62,7 +64,7 @@ class Box:
         e = {"PATH": str(self.bin), "HOME": str(self.home), "TV_CONFIG": str(self.config),
              "FAKE_LOG": str(self.log), "SHELL": "/bin/zsh"}
         e.update(env)
-        return subprocess.run(["sh", str(TV), *args], input=input, capture_output=True,
+        return subprocess.run([SH, str(TV), *args], input=input, capture_output=True,
                               text=True, env=e)
 
     def calls(self):
@@ -453,7 +455,7 @@ def test_an_unknown_command_says_so_and_suggests(box):
 
 def test_help_lines_up():
     import re
-    text = subprocess.run(["sh", str(TV), "help"], capture_output=True, text=True).stdout
+    text = subprocess.run([SH, str(TV), "help"], capture_output=True, text=True).stdout
     rows = [line for line in text.splitlines() if line.startswith("  tv ")]
     starts = set()
     for line in rows:
@@ -558,7 +560,7 @@ def test_move_takes_a_relative_path(box, tmp_path):
     box.configure(FOLDER=str(old))
     e = {"PATH": str(box.bin), "HOME": str(box.home), "TV_CONFIG": str(box.config),
          "FAKE_LOG": str(box.log), "FAKE_STATE": "stopped"}
-    r = subprocess.run(["sh", str(TV), "move", "Documents/tv"], cwd=box.home, env=e,
+    r = subprocess.run([SH, str(TV), "move", "Documents/tv"], cwd=box.home, env=e,
                        capture_output=True, text=True)
     assert r.returncode == 0, r.stdout + r.stderr
     assert f"FOLDER='{box.home}/Documents/tv'" in box.config.read_text()

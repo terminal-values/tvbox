@@ -151,3 +151,16 @@ def test_mac_app_answers_every_click_with_its_window():
     assert "openFolder" not in start
     run = src[src.index("on run"):]
     assert run.index('state is "stopped"') < run.index("showRunning()")
+
+
+def test_without_a_terminal_it_finishes_and_says_what_is_next(home):
+    # Found in the Linux run: with no terminal (an agent installing for
+    # someone), the check for /dev/tty made sh exit 2 without a word.
+    e = env(home)
+    del e["TVBOX_NO_JOIN"]
+    # dash is Debian's sh, and the one that exits; a Mac has it too.
+    shell = shutil.which("dash") or "sh"
+    r = subprocess.run([shell, str(ROOT / "install.sh")], env=e, capture_output=True, text=True,
+                       stdin=subprocess.DEVNULL, start_new_session=True)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "tv join" in r.stdout

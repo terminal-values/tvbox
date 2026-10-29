@@ -64,7 +64,7 @@ fi
 # Straight on to joining, at the terminal (the installer's own input is the
 # script, so tv join reads from /dev/tty). Not if this computer has already
 # joined, or there's no terminal to ask at.
-if [ -z "${TVBOX_NO_JOIN:-}" ] && ! "$BIN/tv" folder >/dev/null 2>&1 && { : </dev/tty; } 2>/dev/null; then
+if [ -z "${TVBOX_NO_JOIN:-}" ] && ! "$BIN/tv" folder >/dev/null 2>&1 && (: </dev/tty) 2>/dev/null; then
     echo
     echo "Now to join Terminal Values from this computer."
     "$BIN/tv" join </dev/tty
