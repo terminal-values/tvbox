@@ -1,20 +1,48 @@
 #!/bin/sh
-# Is the box on TV's tailnet, and is Syncthing connected to tvhome?
+# Is the box on TV's tailnet, and is the TV folder up to date with tvhome's?
+# Exits 1 if it isn't on the tailnet or isn't connected to tvhome's Syncthing.
 set -u
-. /state/tvhome.env
+. "${TVBOX_ENV:-/state/tvhome.env}"
+ST=${TVBOX_ST:-/state/syncthing}
+
 bad=0
-if tailscale status >/dev/null 2>&1; then
-    echo "On TV's tailnet."
-else
-    echo "Not on TV's tailnet: tv join (with a key from Danny), or check your connection."
-    bad=1
+case $(tailscale status --json 2>/dev/null | jq -r '.BackendState // empty' 2>/dev/null) in
+    Running) echo "On TV's tailnet." ;;
+    NeedsLogin|NeedsMachineAuth)
+        echo "Not on TV's tailnet: tv join, with a new invitation from Danny."; bad=1 ;;
+    *)  echo "Connecting to TV's tailnet: the box has just started (or this computer is offline). Give it a minute."
+        bad=1 ;;
+esac
+
+key=$(sed -n 's:.*<apikey>\(.*\)</apikey>.*:\1:p' "$ST/config.xml" 2>/dev/null)
+api() { curl -fsS --noproxy '*' -H "X-API-Key: $key" "http://127.0.0.1:8384/rest/$1" 2>/dev/null; }
+
+connected=$(api system/connections |
+    jq -r --arg id "${TVHOME_SYNCTHING_ID:-}" '.connections[$id].connected // false' 2>/dev/null)
+if [ "$connected" != true ]; then
+    if [ "$bad" = 0 ]; then
+        echo "Not connected to tvhome's Syncthing yet. Just after tv start that's normal; if you've only just joined, Danny may not have added this box yet (stage 3)."
+    else
+        echo "Not connected to tvhome's Syncthing yet, so documents aren't syncing."
+    fi
+    exit 1
 fi
-conn=$(syncthing cli --home=/state/syncthing show connections 2>/dev/null)
-if [ -n "$TVHOME_SYNCTHING_ID" ] &&
-   printf '%s' "$conn" | tr -d ' \n' | grep -q "\"$TVHOME_SYNCTHING_ID\":{[^}]*\"connected\":true"; then
-    echo "Syncing with tvhome."
-else
-    echo "Not connected to tvhome's Syncthing yet, so documents aren't syncing."
-    bad=1
+
+local=$(api "db/status?folder=terminalvalues")
+remote=$(api "db/completion?folder=terminalvalues&device=${TVHOME_SYNCTHING_ID}")
+field() { printf '%s' "$1" | jq -r "$2 // 0" 2>/dev/null; }
+
+if [ "$(field "$remote" .remoteState)" = notSharing ]; then
+    echo "Connected to tvhome, but it hasn't shared TV's folder with this box yet: ask Danny."
+    exit "$bad"
 fi
+need=$(( $(field "$local" .needFiles) + $(field "$local" .needDeletes) ))
+global=$(field "$local" .globalFiles)
+sending=$(field "$remote" .needItems)
+if [ "$need" -gt 0 ]; then
+    mb=$(field "$local" '(.needBytes / 1048576 * 10 | round / 10)')
+    echo "Getting TV's documents from tvhome: $need of $global files to go ($mb MB)."
+fi
+[ "$sending" -gt 0 ] && echo "Sending your changes to tvhome: $sending files to go."
+[ "$need" -eq 0 ] && [ "$sending" -eq 0 ] && echo "Up to date with tvhome ($global files)."
 exit "$bad"

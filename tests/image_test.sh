@@ -17,7 +17,7 @@ ok "the image builds"
 
 run() { $RT run --rm --entrypoint /bin/sh "$@"; }
 
-for tool in tailscale tailscaled syncthing git age age-keygen passage uv make ssh socat getopt tree; do
+for tool in tailscale tailscaled syncthing git age age-keygen passage uv make ssh socat getopt tree jq curl; do
     if run "$IMAGE" -c "command -v $tool" >/dev/null 2>&1; then
         ok "$tool is in the box"
     else
