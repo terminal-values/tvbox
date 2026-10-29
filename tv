@@ -220,8 +220,12 @@ parse_invitation() {
     # shellcheck disable=SC2086
     set -- $1
     IFS=$old_ifs
-    [ $# -eq 4 ] && [ "$1" = tvjoin ] && [ -n "$2" ] && [ -n "$3" ] || return 1
-    case $4 in tskey-?*) ;; *) return 1 ;; esac
+    [ $# -eq 4 ] && [ "$1" = tvjoin ] || return 1
+    # Each part has its own shape, checked strictly: they end up in a file
+    # the box reads as shell.
+    printf '%s' "$2" | grep -Eqx '[a-z0-9-]+(\.[a-z0-9-]+)+' || return 1
+    printf '%s' "$3" | grep -Eqx '([A-Z2-7]{7}-){7}[A-Z2-7]{7}' || return 1
+    printf '%s' "$4" | grep -Eqx 'tskey-[A-Za-z0-9-]+' || return 1
     tailnet=$2 tvhome_id=$3 key=$4
 }
 
@@ -400,8 +404,17 @@ cmd_import_key() {
     in_box tvbox-import-key "$@"
 }
 
+# tv export-key [FILE]: a copy of your age key, to FILE (made readable only
+# by you) or to wherever stdout goes, but never the screen.
 cmd_export_key() {
     need_box
+    if [ -n "${1:-}" ]; then
+        [ -e "$1" ] && die 2 "$1 is already there; pick a new name."
+        ( umask 077; in_box cat /state/home/.passage/identities > "$1" ) || die 1 "Couldn't write $1."
+        say "Your age key is in $1, readable only by you. Put it somewhere safe (your"
+        say "password manager), then delete it here."
+        return
+    fi
     [ -t 1 ] && die 2 "This writes out your secret key, so send it to a file, not the screen:
 tv export-key > somewhere-safe/tv-age-key.txt"
     in_box cat /state/home/.passage/identities
@@ -430,6 +443,11 @@ cmd_uninstall() {
     keep=ask
     [ "${1:-}" = --yes-keep-state ] && keep=yes
     detect_runtime
+    # With the runtime stopped, the box and its storage can't be removed:
+    # stop here rather than leave them behind and say they're gone.
+    if [ -n "$RT" ] && ! runtime_answers; then
+        die 4 "The container runtime ($RT) isn't running, so the box can't be removed. Start it, then run tv uninstall again."
+    fi
     if [ -n "$RT" ]; then
         "$RT" stop "$BOX" >/dev/null 2>&1
         "$RT" rm "$BOX" >/dev/null 2>&1
@@ -449,8 +467,11 @@ cmd_uninstall() {
     fi
     for rc in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.profile"; do
         if [ -f "$rc" ] && grep -qF "# added by the tvbox installer" "$rc"; then
-            grep -vF "# added by the tvbox installer" "$rc" > "$rc.tvbox-tmp"
-            mv -f "$rc.tvbox-tmp" "$rc"
+            # Rewritten in place, not replaced: it may be a symlink (stow).
+            # (grep -v exits 1 when nothing's left: still a success here.)
+            { grep -vF "# added by the tvbox installer" "$rc" || true; } > "$rc.tvbox-tmp" &&
+                cat "$rc.tvbox-tmp" > "$rc"
+            rm -f "$rc.tvbox-tmp"
             say "Took the PATH line out of $rc."
         fi
     done
@@ -508,7 +529,7 @@ tv: Terminal Values' box.
   tv shell         a shell in the box, in the TV folder
   tv run CMD ...   run any command in the box, in the TV folder
   tv import-key    bring in your saved age key (tv import-key < file)
-  tv export-key    save a copy of your age key (tv export-key > file)
+  tv export-key F  save a copy of your age key to file F
   tv update        get a newer box, showing what changed first
   tv folder        print where the TV folder is
   tv move FOLDER   move the TV folder somewhere else
@@ -530,7 +551,7 @@ case $cmd in
     shell) need_box; in_box bash -l ;;
     pages) cmd_pages "$@" ;;
     import-key) cmd_import_key "$@" ;;
-    export-key) cmd_export_key ;;
+    export-key) cmd_export_key "$@" ;;
     folder) need_config; say "$FOLDER" ;;
     move) cmd_move "$@" ;;
     check) cmd_check ;;

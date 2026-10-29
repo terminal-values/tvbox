@@ -596,3 +596,53 @@ def test_joining_again_keeps_the_folder_it_has(box):
     assert f"FOLDER='{elsewhere}'" in box.config.read_text()
     assert f"{elsewhere}:/home/tv/terminalvalues" in box.call("run")
     assert not (box.home / "Documents" / "terminalvalues").exists()
+
+
+# --- from the final review, 2026-10-29 --------------------------------------
+
+@pytest.mark.parametrize("bad", [
+    f"tvjoin:tail;net.ts.net:{STID}:tskey-auth-x-y",
+    f"tvjoin:$(id).ts.net:{STID}:tskey-auth-x-y",
+    "tvjoin:example-tailnet.ts.net:NOT-A-DEVICE-ID:tskey-auth-x-y",
+    f"tvjoin:example-tailnet.ts.net:{STID}:tskey-auth-x y",
+])
+def test_join_refuses_an_invitation_that_isnt_well_formed(box, bad):
+    # Its parts end up in a file the box sources as shell.
+    box.runtimes("docker")
+    r = box.tv("join", "--login", "sam", input=bad + "\n")
+    assert r.returncode == 2
+    assert not [c for c in box.calls() if len(c) > 1 and c[1] == "run"]
+
+
+def test_uninstall_with_the_runtime_stopped_removes_nothing(box):
+    box.runtimes("docker")
+    box.configure()
+    (box.home / ".local/bin").mkdir(parents=True)
+    (box.home / ".local/bin/tv").write_text("tv")
+    r = box.tv("uninstall", FAKE_DOWN="1")
+    assert r.returncode != 0
+    assert "Removed" not in r.stdout
+    assert box.config.exists() and (box.home / ".local/bin/tv").exists()
+
+
+def test_uninstall_edits_a_symlinked_startup_file_in_place(box, tmp_path):
+    # Stow and friends keep dotfiles as symlinks; mv over one replaced it.
+    box.runtimes("docker")
+    box.configure()
+    real = tmp_path / "dotfiles-zshrc"
+    real.write_text('alias x=y\nexport PATH="$HOME/.local/bin:$PATH"  # added by the tvbox installer\n')
+    (box.home / ".zshrc").symlink_to(real)
+    r = box.tv("uninstall", "--yes-keep-state")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert (box.home / ".zshrc").is_symlink()
+    assert real.read_text() == "alias x=y\n"
+
+
+def test_export_key_to_a_file_only_you_can_read(box):
+    box.runtimes("docker")
+    box.configure()
+    target = box.home / "tv-age-key.txt"
+    r = box.tv("export-key", str(target), FAKE_STATE="running")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert target.exists() and oct(target.stat().st_mode & 0o777) == "0o600"
+    assert box.call("exec")[-2:] == ["cat", "/state/home/.passage/identities"]
