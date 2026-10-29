@@ -17,7 +17,7 @@ Apply them? [y/N] y
 Caught up with tvhome (1a2b3c4 Add a receipts importer).
 ```
 
-The TV folder stays an ordinary folder (`~/terminalvalues`) that the member
+The TV folder stays an ordinary folder (`~/Documents/terminalvalues`) that the member
 opens in their own apps and points their agent at. The box mounts it and
 does the syncing, the git and the secrets.
 
@@ -55,6 +55,7 @@ tv shell               a shell in the box
 tv export-key          save a copy of your age key (tv export-key > file)
 tv import-key          bring one in (--replace to swap out a new one)
 tv update              a newer box, showing tvbox's commits since yours first
+tv folder / move DIR    where the TV folder is; put it somewhere else
 ```
 
 ## How it works

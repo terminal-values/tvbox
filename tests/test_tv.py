@@ -17,7 +17,7 @@ INVITE = f"tvjoin:example-tailnet.ts.net:{STID}:tskey-auth-x-y\n"
 TV = ROOT / "tv"
 FAKE = Path(__file__).resolve().parent / "fakeruntime"
 TOOLS = ["sh", "env", "python3", "id", "mkdir", "cat", "sed", "grep", "ls",
-         "uname", "mv", "rm", "tr", "dirname", "head", "chmod", "basename"]
+         "uname", "mv", "rm", "rmdir", "tr", "dirname", "head", "chmod", "basename"]
 
 
 @pytest.fixture
@@ -36,6 +36,10 @@ class Box:
             real = shutil.which(tool)
             if real:
                 (self.bin / tool).symlink_to(real)
+        # Linux unless a test says otherwise, whatever this machine is.
+        (self.bin / "uname").unlink(missing_ok=True)
+        (self.bin / "uname").write_text('#!/bin/sh\necho "${FAKE_UNAME:-Linux}"\n')
+        (self.bin / "uname").chmod(0o755)
         self.log = tmp / "log"
         self.log.touch()
         self.config = tmp / "config"
@@ -457,3 +461,104 @@ def test_help_lines_up():
         assert m, line
         starts.add(m.start(1))
     assert len(starts) == 1, starts
+
+
+# --- where the folder goes, and moving it (2026-10-29) -----------------------
+
+def fake_tool(box, name, script):
+    (box.bin / name).write_text("#!/bin/sh\n" + script + "\n")
+    (box.bin / name).chmod(0o755)
+
+
+def test_join_on_a_mac_puts_the_folder_in_documents(box):
+    box.runtimes("container")
+    fake_tool(box, "defaults", "echo 0")
+    r = box.tv("join", "--login", "sam", input=INVITE, FAKE_UNAME="Darwin")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert (box.home / "Documents" / "terminalvalues").is_dir()
+    assert f"FOLDER='{box.home}/Documents/terminalvalues'" in box.config.read_text()
+    assert f"{box.home}/Documents/terminalvalues" in r.stdout
+
+
+def test_join_keeps_out_of_documents_icloud_syncs(box):
+    box.runtimes("container")
+    fake_tool(box, "defaults", '[ "$3" = FXICloudDriveDocuments ] && echo 1')
+    r = box.tv("join", "--login", "sam", input=INVITE, FAKE_UNAME="Darwin")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert f"FOLDER='{box.home}/terminalvalues'" in box.config.read_text()
+    assert "iCloud" in r.stdout
+
+
+def test_join_on_linux_uses_the_xdg_documents_dir(box):
+    box.runtimes("podman")
+    docs = box.home / "Dokumente"
+    docs.mkdir()
+    fake_tool(box, "xdg-user-dir", f'[ "$1" = DOCUMENTS ] && echo {docs}')
+    r = box.tv("join", "--login", "sam", input=INVITE)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert f"FOLDER='{docs}/terminalvalues'" in box.config.read_text()
+
+
+def test_join_on_linux_without_documents_uses_home(box):
+    box.runtimes("podman")
+    fake_tool(box, "xdg-user-dir", f"echo {box.home}")
+    r = box.tv("join", "--login", "sam", input=INVITE)
+    assert f"FOLDER='{box.home}/terminalvalues'" in box.config.read_text()
+
+
+def test_move_takes_the_folder_and_remakes_the_box(box):
+    box.runtimes("docker")
+    old, new = box.home / "terminalvalues", box.home / "Documents" / "tv"
+    (old / "doc").mkdir(parents=True)
+    (old / "doc" / "a.md").write_text("hi")
+    box.configure(FOLDER=str(old))
+    r = box.tv("move", str(new), FAKE_STATE="running")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert (new / "doc" / "a.md").read_text() == "hi" and not old.exists()
+    assert f"FOLDER='{new}'" in box.config.read_text()
+    verbs = [c[1] for c in box.calls() if len(c) > 1]
+    assert verbs.index("stop") < verbs.index("rm") < verbs.index("run")
+    assert f"{new}:/home/tv/terminalvalues" in box.call("run")
+
+
+def test_move_into_an_empty_folder_and_leaves_a_stopped_box_stopped(box):
+    box.runtimes("docker")
+    old, new = box.home / "terminalvalues", box.home / "elsewhere"
+    old.mkdir()
+    (old / "x").write_text("x")
+    new.mkdir()
+    box.configure(FOLDER=str(old))
+    r = box.tv("move", str(new), FAKE_STATE="stopped")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert (new / "x").exists()
+    assert not [c for c in box.calls() if len(c) > 1 and c[1] == "run"]
+
+
+@pytest.mark.parametrize("dest", ["full", "inside"])
+def test_move_refuses_a_full_folder_or_one_inside_itself(box, dest):
+    box.runtimes("docker")
+    old = box.home / "terminalvalues"
+    old.mkdir()
+    (old / "x").write_text("x")
+    target = old / "sub" if dest == "inside" else box.home / "full"
+    if dest == "full":
+        target.mkdir()
+        (target / "y").write_text("y")
+    box.configure(FOLDER=str(old))
+    r = box.tv("move", str(target), FAKE_STATE="stopped")
+    assert r.returncode == 2
+    assert (old / "x").exists() and f"FOLDER='{old}'" in box.config.read_text()
+    assert "isn't a command" not in r.stderr
+
+
+def test_move_takes_a_relative_path(box, tmp_path):
+    box.runtimes("docker")
+    old = box.home / "terminalvalues"
+    old.mkdir()
+    box.configure(FOLDER=str(old))
+    e = {"PATH": str(box.bin), "HOME": str(box.home), "TV_CONFIG": str(box.config),
+         "FAKE_LOG": str(box.log), "FAKE_STATE": "stopped"}
+    r = subprocess.run(["sh", str(TV), "move", "Documents/tv"], cwd=box.home, env=e,
+                       capture_output=True, text=True)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert f"FOLDER='{box.home}/Documents/tv'" in box.config.read_text()

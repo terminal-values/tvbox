@@ -127,6 +127,26 @@ in_box() {
 
 # --- config ----------------------------------------------------------------
 
+# Where the TV folder goes unless tv join --folder says otherwise: in
+# Documents, not one more thing at the top of the home folder. But not in a
+# Mac's Documents that iCloud syncs: TV's documents would go to Apple, and two
+# sync programs would fight over the same files. Sets folder and why.
+default_folder() {
+    why=
+    if [ "$(uname)" = Darwin ]; then
+        if [ "$(defaults read com.apple.finder FXICloudDriveDocuments 2>/dev/null)" = 1 ]; then
+            folder=$HOME/terminalvalues
+            why="(Not in Documents, because iCloud syncs that, and TV's documents travel only by tvhome.)"
+        else
+            folder=$HOME/Documents/terminalvalues
+        fi
+        return
+    fi
+    docs=$(xdg-user-dir DOCUMENTS 2>/dev/null) || docs=
+    [ -n "$docs" ] && [ "$docs" != "$HOME" ] && [ -d "$docs" ] || docs=$HOME/Documents
+    if [ -d "$docs" ]; then folder=$docs/terminalvalues; else folder=$HOME/terminalvalues; fi
+}
+
 quote() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
 
 write_config() {
@@ -241,7 +261,8 @@ cmd_join() {
     # For the history: who made each commit.
     if [ -z "$name" ] && [ -t 0 ]; then printf 'Your name, as it should appear in TV'"'"'s history: '; read -r name || true; fi
     if [ -z "$email" ] && [ -t 0 ]; then printf 'Your email: '; read -r email || true; fi
-    folder=${folder:-$HOME/terminalvalues}
+    why=
+    [ -n "$folder" ] || default_folder
     # A folder holding only Syncthing's markers is one an earlier join made.
     if [ -d "$folder" ] && [ -n "$(ls -A "$folder" | grep -vxE '\.stfolder|\.stignore|\.DS_Store')" ] &&
        [ ! -e "$folder/.git" ] &&
@@ -281,6 +302,8 @@ with --folder, or use it anyway with: tv join --adopt --folder $folder"
     # Only now: a config is what tells tv (and the installer) this computer
     # has joined.
     write_config
+    say "Your TV folder is $FOLDER. $why"
+    say "(tv folder says where it is; tv move puts it somewhere else.)"
     # The invitation's key is used up now, but don't leave it lying about.
     if [ "$clip" = yes ] || command -v pbcopy >/dev/null 2>&1; then
         printf '' | pbcopy 2>/dev/null
@@ -328,6 +351,34 @@ cmd_pages() {
     if command -v open >/dev/null 2>&1; then open "$url"
     elif command -v xdg-open >/dev/null 2>&1; then xdg-open "$url"
     else say "TV's pages: $url"; fi
+}
+
+# tv move NEW-FOLDER: put the TV folder somewhere else. The box mounts the
+# folder when it's made, so it's remade (its storage, and so the key, is
+# kept). Syncthing inside sees the same path as before, so nothing resyncs.
+cmd_move() {
+    need_config
+    [ $# -eq 1 ] && [ -n "$1" ] || die 2 "Usage: tv move NEW-FOLDER"
+    case $1 in /*) dest=$1 ;; *) dest=$(pwd)/$1 ;; esac
+    dest=${dest%/}
+    case $dest/ in "$FOLDER"/*) die 2 "$dest is in the TV folder itself; pick somewhere outside it." ;; esac
+    if [ -e "$dest" ]; then
+        [ -d "$dest" ] && [ -z "$(ls -A "$dest")" ] ||
+            die 2 "$dest already has something in it; pick a new or empty folder."
+    fi
+    runtime_up
+    was=$(box_state)
+    [ "$was" = running ] && "$RT" stop "$BOX" >/dev/null
+    [ -d "$dest" ] && rmdir "$dest"
+    mkdir -p "$(dirname "$dest")" && mv "$FOLDER" "$dest" ||
+        die 1 "Couldn't move $FOLDER to $dest."
+    FOLDER=$dest
+    write_config
+    [ "$was" != absent ] && "$RT" rm "$BOX" >/dev/null 2>&1
+    if [ "$was" = running ]; then
+        create_box || die 1 "The folder moved, but the box wouldn't start (see above). Try tv start."
+    fi
+    say "The TV folder is now $FOLDER."
 }
 
 cmd_import_key() {
@@ -447,6 +498,7 @@ tv: Terminal Values' box.
   tv export-key    save a copy of your age key (tv export-key > file)
   tv update        get a newer box, showing what changed first
   tv folder        print where the TV folder is
+  tv move FOLDER   move the TV folder somewhere else
   tv uninstall     remove the box and tv
 EOF
 }
@@ -467,6 +519,7 @@ case $cmd in
     import-key) cmd_import_key "$@" ;;
     export-key) cmd_export_key ;;
     folder) need_config; say "$FOLDER" ;;
+    move) cmd_move "$@" ;;
     check) cmd_check ;;
     runtime-start) cmd_runtime_start ;;
     update) cmd_update ;;
@@ -475,7 +528,7 @@ case $cmd in
     *)  # A near miss gets a suggestion: tv catchup, tv catch_up, tv Status.
         near=$(printf '%s' "$cmd" | tr 'A-Z_' 'a-z-')
         for c in join start stop status catch-up push git passage run shell pages \
-                 import-key export-key folder update uninstall; do
+                 import-key export-key folder move update uninstall; do
             [ "$(printf '%s' "$c" | tr -d -)" = "$(printf '%s' "$near" | tr -d -)" ] && near=$c && break
             c=
         done
