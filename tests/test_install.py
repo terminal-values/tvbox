@@ -175,3 +175,14 @@ def test_mac_app_takes_the_invitation_from_the_clipboard():
     assert "invitation" not in join.replace("the invitation", "").replace("Invitation", "") \
         or "quoted form of invitation" not in join
     assert "hidden answer" not in join
+
+
+def test_reinstalling_on_a_joined_computer_doesnt_say_join(home):
+    # Rerunning the installer is how the Mac app gets rebuilt after an update.
+    cfg = home / ".config/tv"
+    cfg.mkdir(parents=True)
+    (cfg / "config").write_text(f"FOLDER='{home}/terminalvalues'\nLOGIN='sam'\n")
+    r = install(home)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "tv join" not in r.stdout
+    assert "already joined" in r.stdout
