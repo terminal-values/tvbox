@@ -8,7 +8,7 @@ container runtime and this script.
 ```console
 $ tv status
 On TV's tailnet.
-Syncing with tvhome.
+Up to date with tvhome (214 files).
 $ tv catch-up
 Code and instructions changed on tvhome since you last caught up:
   1a2b3c4 Sam: Add a receipts importer
@@ -52,7 +52,7 @@ tv push                commits and the secrets store to tvhome
 tv git ... / tv passage ... / tv run CMD ...   in the box, in the folder
 tv pages [PAGE]        TV's internal pages, via 127.0.0.1:8484 (or the next free port)
 tv shell               a shell in the box
-tv export-key          save a copy of your age key (tv export-key > file)
+tv export-key FILE     save a copy of your age key (readable only by you)
 tv import-key          bring one in (--replace to swap out a new one)
 tv update              a newer box, showing tvbox's commits since yours first
 tv folder / move DIR    where the TV folder is; put it somewhere else
