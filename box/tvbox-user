@@ -1,0 +1,17 @@
+#!/bin/sh
+# Gives the member's uid (TV_UID, TV_GID) a passwd entry whose home is
+# $HOME (/state/home): ssh refuses a uid with no entry, and reads its config
+# from the entry's home, not $HOME. A uid from a Mac is new to the image;
+# under rootless Podman the member is root, whose home is /root.
+set -u
+U=${TV_UID:-0} G=${TV_GID:-0}
+getent group "$G" >/dev/null || echo "tv:x:$G:" >> /etc/group
+if entry=$(getent passwd "$U"); then
+    # Not usermod, which refuses a user with processes: root always has.
+    if [ "$(printf '%s' "$entry" | cut -d: -f6)" != "$HOME" ]; then
+        awk -F: -v OFS=: -v u="$U" -v h="$HOME" '$3 == u { $6 = h } 1' /etc/passwd > /etc/passwd.new &&
+            cat /etc/passwd.new > /etc/passwd && rm -f /etc/passwd.new
+    fi
+else
+    echo "tv:x:$U:$G:${TV_NAME:-Terminal Values member}:$HOME:/bin/bash" >> /etc/passwd
+fi

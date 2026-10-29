@@ -89,6 +89,16 @@ fi
 for f in $(inbox sh -c 'ls /usr/local/bin/tvbox-*'); do
     if inbox sh -n "$f" 2>/dev/null; then ok "$f parses"; else fail "$f doesn't parse: $(inbox sh -n "$f" 2>&1)"; fi
 done
+# ssh reads its config from the passwd entry's home, not $HOME, so the
+# member's entry must say /state/home: for a uid from their computer (a
+# Mac), and for root (rootless Podman, found in the Linux run: ssh read
+# /root/.ssh, missed the ProxyCommand and hung).
+for uid in 0 4321; do
+    home=$($RT run --rm --entrypoint sh -e "TV_UID=$uid" -e "TV_GID=$uid" "$IMAGE" \
+        -c 'tvbox-user && getent passwd '"$uid"' | cut -d: -f6' 2>/dev/null)
+    if [ "$home" = /state/home ]; then ok "uid $uid's home is /state/home"
+    else fail "uid $uid's home is '$home', not /state/home"; fi
+done
 # ssh needs a passwd entry for the uid it runs as, and commits need a name.
 if inbox ssh -G tvhome 2>/dev/null | grep -qx 'user tvtest'; then
     ok "ssh runs as the member's uid"
