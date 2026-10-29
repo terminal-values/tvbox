@@ -321,9 +321,10 @@ cmd_status() {
     in_box tvbox-status
 }
 
+# tv pages [PATH]: TV's internal pages, or one of them (a path in www/).
 cmd_pages() {
     need_box
-    url=http://127.0.0.1:$PORT/
+    url=http://127.0.0.1:$PORT/$(printf '%s' "${1:-}" | sed 's:^/*::; s/ /%20/g')
     if command -v open >/dev/null 2>&1; then open "$url"
     elif command -v xdg-open >/dev/null 2>&1; then xdg-open "$url"
     else say "TV's pages: $url"; fi
@@ -439,7 +440,7 @@ tv: Terminal Values' box.
   tv push        send your code commits and the secrets to tvhome
   tv git ...     git, in the TV folder, in the box
   tv passage ... TV's shared secrets
-  tv pages       open TV's internal pages in your browser
+  tv pages [PAGE] open TV's internal pages (or one, by its path in www/)
   tv shell       a shell in the box, in the TV folder
   tv run CMD ... run any command in the box, in the TV folder
   tv import-key  bring in your saved age key (tv import-key < file)
@@ -462,7 +463,7 @@ case $cmd in
     git|passage) need_box; in_box "$cmd" "$@" ;;
     run) need_box; in_box "$@" ;;
     shell) need_box; in_box bash -l ;;
-    pages) cmd_pages ;;
+    pages) cmd_pages "$@" ;;
     import-key) cmd_import_key "$@" ;;
     export-key) cmd_export_key ;;
     folder) need_config; say "$FOLDER" ;;

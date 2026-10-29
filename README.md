@@ -50,7 +50,7 @@ tv status              on the tailnet? syncing?
 tv catch-up            code and secrets up to date, code changes shown first
 tv push                commits and the secrets store to tvhome
 tv git ... / tv passage ... / tv run CMD ...   in the box, in the folder
-tv pages               TV's internal pages, via 127.0.0.1:8484
+tv pages [PAGE]        TV's internal pages, via 127.0.0.1:8484 (or the next free port)
 tv shell               a shell in the box
 tv export-key          save a copy of your age key (tv export-key > file)
 tv import-key          bring one in (--replace to swap out a new one)

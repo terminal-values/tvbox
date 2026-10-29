@@ -422,3 +422,16 @@ def test_join_takes_back_a_folder_only_syncthing_has_touched(box):
     (folder / ".stignore").write_text("x\n")
     r = box.tv("join", "--login", "sam", input=INVITE)
     assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_pages_opens_a_page_by_its_path(box):
+    # Once www/ has a front page, a member's own page isn't in a listing.
+    box.runtimes("docker")
+    box.configure(PORT="8485")
+    (box.bin / "open").write_text(f'#!/bin/sh\necho "$@" > {box.tmp}/opened\n')
+    (box.bin / "open").chmod(0o755)
+    r = box.tv("pages", "hello-sam.html", FAKE_STATE="running")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert (box.tmp / "opened").read_text().strip() == "http://127.0.0.1:8485/hello-sam.html"
+    box.tv("pages", "/notes/a b.html", FAKE_STATE="running")
+    assert (box.tmp / "opened").read_text().strip() == "http://127.0.0.1:8485/notes/a%20b.html"
