@@ -302,7 +302,7 @@ with --folder, or use it anyway with: tv join --adopt --folder $folder"
     # Only now: a config is what tells tv (and the installer) this computer
     # has joined.
     write_config
-    say "Your TV folder is $FOLDER. $why"
+    say "Your TV folder is $FOLDER.${why:+ $why}"
     say "(tv folder says where it is; tv move puts it somewhere else.)"
     # The invitation's key is used up now, but don't leave it lying about.
     if [ "$clip" = yes ] || command -v pbcopy >/dev/null 2>&1; then

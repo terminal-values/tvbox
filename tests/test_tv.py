@@ -480,6 +480,7 @@ def test_join_on_a_mac_puts_the_folder_in_documents(box):
     assert (box.home / "Documents" / "terminalvalues").is_dir()
     assert f"FOLDER='{box.home}/Documents/terminalvalues'" in box.config.read_text()
     assert f"{box.home}/Documents/terminalvalues" in r.stdout
+    assert f"Your TV folder is {box.home}/Documents/terminalvalues.\n" in r.stdout
 
 
 def test_join_keeps_out_of_documents_icloud_syncs(box):
