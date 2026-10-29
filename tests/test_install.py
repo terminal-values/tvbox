@@ -141,3 +141,13 @@ def test_next_step_names_tv_by_its_full_path_until_the_path_has_it(home):
     assert f"Next: {home}/.local/bin/tv join" in r.stdout
     r = install(home, path=f"{home}/.local/bin:/usr/bin:/bin")
     assert "Next: tv join" in r.stdout
+
+
+def test_mac_app_answers_every_click_with_its_window():
+    # In the outsider test, a click on a stopped box opened the folder in
+    # Finder and nothing else, so the app seemed to do different things.
+    src = (ROOT / "mac" / "Terminal Values.applescript").read_text()
+    start = src[src.index("on startBox()"):src.index("end startBox")]
+    assert "openFolder" not in start
+    run = src[src.index("on run"):]
+    assert run.index('state is "stopped"') < run.index("showRunning()")

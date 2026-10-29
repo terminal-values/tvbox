@@ -7,8 +7,9 @@
 --   runtime stopped offer to start it
 --   not joined      ask for login, name, email and the invitation; tv join;
 --                   show the three lines to send Danny
---   box stopped     start it and open the TV folder
+--   box stopped     start it, then as below
 --   box running     tv status, with Stop, Open pages and Open folder
+-- so every click ends in the same window, whatever state the box was in.
 
 property appTitle : "Terminal Values"
 
@@ -49,10 +50,26 @@ on startBox()
 		fail("The box wouldn't start:" & return & return & errText)
 		return false
 	end try
-	openFolder()
-	display notification "TV's documents sync while it runs." with title "The box is running"
 	return true
 end startBox
+
+on showRunning()
+	try
+		set report to tv("status")
+	on error errText number errNum
+		-- 1: running, but not on the tailnet or not yet syncing.
+		set report to errText
+	end try
+	set choice to button returned of (display dialog "The box is running: TV's documents sync while it runs." & return & return & report buttons {"Stop", "Open pages", "Open folder"} default button "Open folder" with title appTitle)
+	if choice is "Open folder" then
+		openFolder()
+	else if choice is "Open pages" then
+		tv("pages")
+	else if choice is "Stop" then
+		tv("stop")
+		display notification "Documents won't sync until you start it again." with title "The box is stopped"
+	end if
+end showRunning
 
 on join()
 	tellThem("Let's join Terminal Values from this Mac. You'll need the login name you picked and the invitation Danny sent you (one line, starting tvjoin:).")
@@ -93,22 +110,7 @@ on run
 		return
 	end if
 	if state is "stopped" then
-		startBox()
-		return
+		if not startBox() then return
 	end if
-	try
-		set report to tv("status")
-	on error errText number errNum
-		-- 1: running, but not on the tailnet or not yet syncing.
-		set report to errText
-	end try
-	set choice to button returned of (display dialog "The box is running." & return & return & report buttons {"Stop", "Open pages", "Open folder"} default button "Open folder" with title appTitle)
-	if choice is "Open folder" then
-		openFolder()
-	else if choice is "Open pages" then
-		tv("pages")
-	else if choice is "Stop" then
-		tv("stop")
-		display notification "Documents won't sync until you start it again." with title "The box is stopped"
-	end if
+	showRunning()
 end run
