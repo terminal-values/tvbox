@@ -4,12 +4,25 @@
 # Safe to run again: a failed login leaves nothing behind, and an existing
 # age key is kept.
 set -u
-. /state/tvhome.env
 login=${1:?usage: tvbox-join LOGIN}
 read -r key || true  # keep a last line with no newline
 [ -n "$key" ] || { echo "tvbox-join: no auth key given (it starts tskey-)" >&2; exit 2; }
 
-if ! tailscale up --authkey="$key" --hostname="tv-$login" --accept-dns=false --timeout=60s; then
+# tv runs this straight after starting the box: wait for its settings and
+# for tailscaled, so a slow start isn't taken for a bad key.
+i=0
+until [ -s /state/tvhome.env ] && tailscale status --json >/dev/null 2>&1; do
+    i=$((i + 1)); [ $i -gt 60 ] && { echo "tvbox-join: the box didn't finish starting" >&2; exit 1; }
+    sleep 1
+done
+. /state/tvhome.env
+
+# The key goes to tailscale in a file, not its arguments, which other users
+# can see while it runs; the file is gone however this ends.
+keyfile=$(mktemp /state/.authkey.XXXXXX)
+trap 'rm -f "$keyfile"' EXIT
+printf '%s\n' "$key" > "$keyfile"
+if ! tailscale up --auth-key="file:$keyfile" --hostname="tv-$login" --accept-dns=false --timeout=60s; then
     echo "tvbox-join: couldn't join TV's tailnet (above is Tailscale's reason). Check the key, or ask Danny for a new one." >&2
     exit 1
 fi
@@ -31,6 +44,6 @@ echo "age: $(age-keygen -y "$ids")"
 echo
 if [ "${made:-}" = yes ]; then
     echo "Your secret key is new. Save a copy somewhere safe now, such as your"
-    echo "password manager: tv export-key > tv-age-key.txt, then store that file"
+    echo "password manager: tv export-key tv-age-key.txt, then store that file"
     echo "safely and delete it here."
 fi

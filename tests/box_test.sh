@@ -139,8 +139,9 @@ else
     fail "join with no key said: $out"
 fi
 out=$(echo tskey-auth-bogus | $RT exec -i -u "$U:$G" "$NAME" tvbox-join tvtest 2>&1)
-if [ $? -ne 0 ] && ! inbox test -e /state/home/.passage/identities; then
-    ok "join with a bad key fails and makes no age key"
+if [ $? -ne 0 ] && ! inbox test -e /state/home/.passage/identities &&
+   ! inbox grep -rqs tskey-auth-bogus /state /tmp; then
+    ok "join with a bad key fails, makes no age key, and leaves no copy of the key"
 else
     fail "join with a bad key: $out"
 fi

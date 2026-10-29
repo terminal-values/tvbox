@@ -19,7 +19,8 @@ tvbox-user
 mkdir -p "$HOME" /state/tailscale "$ST" /var/run/tailscale
 chown "$U:$G" /state /state/home /state/tailscale "$ST" /var/run/tailscale
 # For the scripts tv runs in the box, which may not see this environment.
-printf 'TVHOME_HOST=%s\nTVHOME_SYNCTHING_ID=%s\nTV_LOGIN=%s\n' \
+# Quoted, though tv checks each value's shape: this file is read as shell.
+printf "TVHOME_HOST='%s'\nTVHOME_SYNCTHING_ID='%s'\nTV_LOGIN='%s'\n" \
     "$TVHOME_HOST" "${TVHOME_SYNCTHING_ID:-}" "${TV_LOGIN:-}" > /state/tvhome.env
 as_member() {
     if [ "$U" = 0 ]; then "$@"
