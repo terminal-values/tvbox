@@ -432,22 +432,22 @@ usage() {
     cat <<'EOF'
 tv: Terminal Values' box.
 
-  tv join        join TV from this computer (once)
-  tv start       start the box; documents sync while it runs
-  tv stop        stop it
-  tv status      is it running, on the tailnet, syncing?
-  tv catch-up    bring the code and secrets up to date, showing code changes first
-  tv push        send your code commits and the secrets to tvhome
-  tv git ...     git, in the TV folder, in the box
-  tv passage ... TV's shared secrets
-  tv pages [PAGE] open TV's internal pages (or one, by its path in www/)
-  tv shell       a shell in the box, in the TV folder
-  tv run CMD ... run any command in the box, in the TV folder
-  tv import-key  bring in your saved age key (tv import-key < file)
-  tv export-key  save a copy of your age key (tv export-key > file)
-  tv update      get a newer box, showing what changed first
-  tv folder      print where the TV folder is
-  tv uninstall   remove the box and tv
+  tv join          join TV from this computer (once)
+  tv start         start the box; documents sync while it runs
+  tv stop          stop it
+  tv status        is it running, on the tailnet, syncing?
+  tv catch-up      bring the code and secrets up to date, showing code changes first
+  tv push          send your code commits and the secrets to tvhome
+  tv git ...       git, in the TV folder, in the box
+  tv passage ...   TV's shared secrets
+  tv pages [PAGE]  open TV's internal pages (or one, by its path in www/)
+  tv shell         a shell in the box, in the TV folder
+  tv run CMD ...   run any command in the box, in the TV folder
+  tv import-key    bring in your saved age key (tv import-key < file)
+  tv export-key    save a copy of your age key (tv export-key > file)
+  tv update        get a newer box, showing what changed first
+  tv folder        print where the TV folder is
+  tv uninstall     remove the box and tv
 EOF
 }
 
@@ -472,5 +472,13 @@ case $cmd in
     update) cmd_update ;;
     uninstall) cmd_uninstall "$@" ;;
     help|-h|--help) usage ;;
-    *) usage >&2; exit 2 ;;
+    *)  # A near miss gets a suggestion: tv catchup, tv catch_up, tv Status.
+        near=$(printf '%s' "$cmd" | tr 'A-Z_' 'a-z-')
+        for c in join start stop status catch-up push git passage run shell pages \
+                 import-key export-key folder update uninstall; do
+            [ "$(printf '%s' "$c" | tr -d -)" = "$(printf '%s' "$near" | tr -d -)" ] && near=$c && break
+            c=
+        done
+        if [ -n "$c" ]; then die 2 "tv $cmd isn't a command. Did you mean tv $c?"
+        else die 2 "tv $cmd isn't a command. tv help lists them."; fi ;;
 esac

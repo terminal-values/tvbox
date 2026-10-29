@@ -435,3 +435,25 @@ def test_pages_opens_a_page_by_its_path(box):
     assert (box.tmp / "opened").read_text().strip() == "http://127.0.0.1:8485/hello-sam.html"
     box.tv("pages", "/notes/a b.html", FAKE_STATE="running")
     assert (box.tmp / "opened").read_text().strip() == "http://127.0.0.1:8485/notes/a%20b.html"
+
+
+def test_an_unknown_command_says_so_and_suggests(box):
+    # `tv catchup` printed the whole help, with no word of what was wrong.
+    r = box.tv("catchup")
+    assert r.returncode == 2
+    assert "tv catchup isn't a command" in r.stderr and "tv catch-up" in r.stderr
+    assert "tv uninstall" not in r.stderr
+    r = box.tv("frobnicate")
+    assert "isn't a command" in r.stderr and "tv help" in r.stderr
+
+
+def test_help_lines_up():
+    import re
+    text = subprocess.run(["sh", str(TV), "help"], capture_output=True, text=True).stdout
+    rows = [line for line in text.splitlines() if line.startswith("  tv ")]
+    starts = set()
+    for line in rows:
+        m = re.match(r"  tv .*?\S {2,}(\S)", line)
+        assert m, line
+        starts.add(m.start(1))
+    assert len(starts) == 1, starts
