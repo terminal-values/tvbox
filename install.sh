@@ -70,5 +70,7 @@ if [ -z "${TVBOX_NO_JOIN:-}" ] && ! "$BIN/tv" folder >/dev/null 2>&1 && { : </de
     "$BIN/tv" join </dev/tty
 else
     echo
-    echo "Next: tv join, with the login name you picked and the invitation Danny sent you."
+    # This terminal's PATH lacks ~/.local/bin if the installer just added it.
+    case ":$PATH:" in *":$BIN:"*) tv=tv ;; *) tv=$BIN/tv ;; esac
+    echo "Next: $tv join, with the login name you picked and the invitation Danny sent you."
 fi

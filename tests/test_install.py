@@ -132,3 +132,12 @@ def test_installer_goes_on_to_join():
     """After installing, the installer runs tv join at the terminal (not in tests)."""
     text = (ROOT / "install.sh").read_text()
     assert '"$BIN/tv" join </dev/tty' in text and "TVBOX_NO_JOIN" in text
+
+
+def test_next_step_names_tv_by_its_full_path_until_the_path_has_it(home):
+    # Found in the outsider test: "Next: tv join" in a terminal where tv
+    # wasn't on the PATH yet gave "command not found".
+    r = install(home)
+    assert f"Next: {home}/.local/bin/tv join" in r.stdout
+    r = install(home, path=f"{home}/.local/bin:/usr/bin:/bin")
+    assert "Next: tv join" in r.stdout
