@@ -10,18 +10,23 @@ set -u
 BOX=tvbox
 VOLUME=tv-state
 INSIDE=/home/tv/terminalvalues
-PORT=8484
+INNER_PORT=8484  # TV's pages, inside the box
 REGISTRY=ghcr.io/terminal-values/tvbox
 DEFAULT_IMAGE=$REGISTRY:latest
 GITHUB=https://api.github.com/repos/terminal-values/tvbox
 CONFIG=${TV_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/tv/config}
 
-FOLDER= IMAGE= LOGIN= NAME= EMAIL= RUNTIME= REVISION= TAILNET= TVHOME_ID=
+FOLDER= IMAGE= LOGIN= NAME= EMAIL= RUNTIME= REVISION= TAILNET= TVHOME_ID= PORT=
 # shellcheck disable=SC1090
 [ -r "$CONFIG" ] && . "$CONFIG"
 IMAGE=${IMAGE:-$DEFAULT_IMAGE}
+# The pages' port on this computer: 8484, or the next free one.
+PORT=${PORT:-$INNER_PORT}
 
 say() { printf '%s\n' "$*"; }
+# How to run tv again: plain tv if the shell finds it, else its full path
+# (straight after installing, ~/.local/bin isn't on the PATH yet).
+me() { if command -v tv >/dev/null 2>&1; then echo tv; else echo "$HOME/.local/bin/tv"; fi; }
 die() { code=$1; shift; printf '%s\n' "$*" >&2; exit "$code"; }
 
 # --- the runtime -----------------------------------------------------------
@@ -81,19 +86,31 @@ need_config() {
     [ -n "$FOLDER" ] && [ -n "$LOGIN" ] || die 2 "This computer hasn't joined TV yet: run tv join first."
 }
 
+# Is something on this computer listening on 127.0.0.1:PORT? (Another
+# user's box on the same Mac, say.) Without nc or bash, assume not.
+port_busy() {
+    if command -v nc >/dev/null 2>&1; then nc -z 127.0.0.1 "$1" >/dev/null 2>&1
+    elif command -v bash >/dev/null 2>&1; then bash -c "echo > /dev/tcp/127.0.0.1/$1" 2>/dev/null
+    else return 1; fi
+}
+
+# Make the box, on a free port. Returns non-zero if the runtime won't.
 create_box() {
     need_config
+    i=0
+    while port_busy "$PORT" && [ $i -lt 50 ]; do PORT=$((PORT + 1)); i=$((i + 1)); done
+    [ -r "$CONFIG" ] && write_config
     if [ "$RT" = container ]; then
         container volume inspect "$VOLUME" >/dev/null 2>&1 ||
             container volume create "$VOLUME" >/dev/null
     fi
     "$RT" run -d --name "$BOX" \
         -v "$FOLDER:$INSIDE" -v "$VOLUME:/state" \
-        -p "127.0.0.1:$PORT:$PORT" \
+        -p "127.0.0.1:$PORT:$INNER_PORT" \
         -e "TV_UID=$UID_IN" -e "TV_GID=$GID_IN" -e "TV_LOGIN=$LOGIN" \
         -e "TV_NAME=$NAME" -e "TV_EMAIL=$EMAIL" \
         -e "TVHOME_HOST=tvhome.$TAILNET" -e "TVHOME_SYNCTHING_ID=$TVHOME_ID" \
-        "$IMAGE" >/dev/null || die 1 "The box wouldn't start (see above)."
+        "$IMAGE" >/dev/null
 }
 
 need_box() {
@@ -125,6 +142,7 @@ write_config() {
         say "REVISION=$(quote "$REVISION")"
         say "TAILNET=$(quote "$TAILNET")"
         say "TVHOME_ID=$(quote "$TVHOME_ID")"
+        say "PORT=$(quote "$PORT")"
     } > "$CONFIG.tmp" && mv -f "$CONFIG.tmp" "$CONFIG"
 }
 
@@ -224,7 +242,9 @@ cmd_join() {
     if [ -z "$name" ] && [ -t 0 ]; then printf 'Your name, as it should appear in TV'"'"'s history: '; read -r name || true; fi
     if [ -z "$email" ] && [ -t 0 ]; then printf 'Your email: '; read -r email || true; fi
     folder=${folder:-$HOME/terminalvalues}
-    if [ -d "$folder" ] && [ -n "$(ls -A "$folder")" ] && [ ! -e "$folder/.git" ] &&
+    # A folder holding only Syncthing's markers is one an earlier join made.
+    if [ -d "$folder" ] && [ -n "$(ls -A "$folder" | grep -vxE '\.stfolder|\.stignore|\.DS_Store')" ] &&
+       [ ! -e "$folder/.git" ] &&
        [ "$adopt" = no ]; then
         die 2 "$folder already has files in it, and isn't a TV folder. Pick another
 with --folder, or use it anyway with: tv join --adopt --folder $folder"
@@ -249,15 +269,18 @@ with --folder, or use it anyway with: tv join --adopt --folder $folder"
     FOLDER=$(cd "$folder" && pwd) LOGIN=$login TAILNET=$tailnet TVHOME_ID=$tvhome_id
     NAME=$name EMAIL=$email
     [ "$IMAGE" = "$DEFAULT_IMAGE" ] && pin_latest
-    write_config
     # A box made before this join may know another tailnet: make it afresh
     # (its storage, and so any age key, is kept).
     if [ "$(box_state)" != absent ]; then
         "$RT" stop "$BOX" >/dev/null 2>&1
         "$RT" rm "$BOX" >/dev/null 2>&1
     fi
-    create_box
-    printf '%s\n' "$key" | in_box tvbox-join "$LOGIN" || exit $?
+    again="Once that's sorted out, run $(me) join again."
+    create_box || die 1 "The box wouldn't start (see above). $again"
+    printf '%s\n' "$key" | in_box tvbox-join "$LOGIN" || die $? "$again"
+    # Only now: a config is what tells tv (and the installer) this computer
+    # has joined.
+    write_config
     # The invitation's key is used up now, but don't leave it lying about.
     if [ "$clip" = yes ] || command -v pbcopy >/dev/null 2>&1; then
         printf '' | pbcopy 2>/dev/null
@@ -268,8 +291,17 @@ cmd_start() {
     runtime_up
     case $(box_state) in
         running) say "The box is already running." ; return ;;
-        stopped) "$RT" start "$BOX" >/dev/null || die 1 "The box wouldn't start (see above)." ;;
-        absent) create_box ;;
+        stopped)
+            if port_busy "$PORT"; then
+                # Something else took its port while it was stopped: remake it
+                # on another (its storage, and so the key, is kept).
+                "$RT" rm "$BOX" >/dev/null 2>&1
+                create_box || die 1 "The box wouldn't start (see above)."
+                say "Its usual port was taken, so TV's pages are now at http://127.0.0.1:$PORT/ (tv pages opens them)."
+            else
+                "$RT" start "$BOX" >/dev/null || die 1 "The box wouldn't start (see above)."
+            fi ;;
+        absent) create_box || die 1 "The box wouldn't start (see above)." ;;
     esac
     say "The box is running; TV's documents sync while it runs. tv stop stops it."
 }
@@ -386,7 +418,7 @@ cmd_update() {
         "$RT" stop "$BOX" >/dev/null 2>&1
         "$RT" rm "$BOX" >/dev/null || die 1 "Couldn't remove the old box."
     fi
-    create_box
+    create_box || die 1 "The new box wouldn't start (see above). Your folder, key and secrets are as they were."
     # tv updates itself too, from the same commit.
     if [ "$0" = "$HOME/.local/bin/tv" ] &&
        curl -fsSL "https://raw.githubusercontent.com/terminal-values/tvbox/$new/tv" -o "$0.new"; then

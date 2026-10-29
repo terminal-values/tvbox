@@ -5,6 +5,7 @@ Appends each invocation's argv (as JSON, with the name it was called by
 first) to $FAKE_LOG. Behaviour:
   FAKE_DOWN=1          the runtime's service isn't running
   FAKE_STATE=...       the box is running, stopped or absent (default absent)
+  FAKE_RUN_FAILS=1     making the box fails (as when its port is taken)
 """
 import json
 import os
@@ -24,6 +25,9 @@ if verb in ("info",) or args[:2] == ["system", "status"]:
 if down:
     print("Cannot connect to the runtime", file=sys.stderr)
     sys.exit(125)
+if verb == "run" and os.environ.get("FAKE_RUN_FAILS") == "1":
+    print("Error: bind: Address already in use", file=sys.stderr)
+    sys.exit(1)
 if verb == "inspect":
     if state == "absent":
         print("no such container", file=sys.stderr)

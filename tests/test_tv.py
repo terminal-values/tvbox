@@ -369,3 +369,56 @@ def test_join_checks_the_runtime_before_asking_anything(box):
     assert r.returncode == 4
     assert "container runtime" in r.stdout + r.stderr
     assert "login" not in r.stdout.lower() and "invitation" not in r.stdout.lower()
+
+
+# --- found in the outsider test, 2026-10-28 ----------------------------------
+
+def busy_ports(box, *ports):
+    """A fake nc: something on this computer listens on these ports."""
+    allowed = " ".join(str(p) for p in ports)
+    (box.bin / "nc").write_text(f'#!/bin/sh\nfor a; do p=$a; done\nfor b in {allowed}; do [ "$p" = "$b" ] && exit 0; done\nexit 1\n')
+    (box.bin / "nc").chmod(0o755)
+
+
+def test_join_picks_a_free_port_and_keeps_it(box):
+    box.runtimes("docker")
+    busy_ports(box, 8484, 8485)
+    r = box.tv("join", "--login", "sam", input=INVITE)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "127.0.0.1:8486:8484" in box.call("run")
+    assert "PORT='8486'" in box.config.read_text()
+
+
+def test_start_moves_a_stopped_box_off_a_taken_port(box):
+    box.runtimes("docker")
+    box.configure(PORT="8484")
+    busy_ports(box, 8484)
+    r = box.tv("start", FAKE_STATE="stopped")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "127.0.0.1:8485:8484" in box.call("run")
+    assert "PORT='8485'" in box.config.read_text()
+    assert "8485" in r.stdout
+
+
+def test_a_config_without_port_uses_8484(box):
+    box.runtimes("docker")
+    box.configure()
+    box.tv("start")
+    assert "127.0.0.1:8484:8484" in box.call("run")
+
+
+def test_a_failed_join_writes_no_config_and_says_to_retry(box):
+    box.runtimes("docker")
+    r = box.tv("join", "--login", "sam", input=INVITE, FAKE_RUN_FAILS="1")
+    assert r.returncode != 0
+    assert not box.config.exists()
+    assert "tv join again" in r.stdout + r.stderr
+
+
+def test_join_takes_back_a_folder_only_syncthing_has_touched(box):
+    box.runtimes("docker")
+    folder = box.home / "terminalvalues"
+    (folder / ".stfolder").mkdir(parents=True)
+    (folder / ".stignore").write_text("x\n")
+    r = box.tv("join", "--login", "sam", input=INVITE)
+    assert r.returncode == 0, r.stdout + r.stderr
