@@ -234,10 +234,14 @@ parse_invitation() {
 invitation_from_clipboard() {
     say "Now copy the invitation Danny sent you: the whole line, starting tvjoin:,"
     say "from Signal (or wherever he sent it). I'll notice it on the clipboard."
-    say "(Ctrl-C to stop.)"
+    # At a terminal, wait for as long as it takes; otherwise (the Mac app,
+    # which asks for the copy first) a minute, rather than hang.
+    if [ -t 0 ]; then say "(Ctrl-C to stop.)"; tries=-1; else tries=60; fi
     while :; do
         invite=$(pbpaste 2>/dev/null)
         parse_invitation "$invite" && break
+        [ "$tries" -eq 0 ] && die 2 "There's no invitation on the clipboard: copy the whole line Danny sent, starting tvjoin:, and try again."
+        tries=$((tries - 1))
         sleep "${TV_POLL:-1}"
     done
     say "Got it."

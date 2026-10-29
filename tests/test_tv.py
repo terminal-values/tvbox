@@ -646,3 +646,14 @@ def test_export_key_to_a_file_only_you_can_read(box):
     assert r.returncode == 0, r.stdout + r.stderr
     assert target.exists() and oct(target.stat().st_mode & 0o777) == "0o600"
     assert box.call("exec")[-2:] == ["cat", "/state/home/.passage/identities"]
+
+
+def test_join_from_clipboard_without_a_terminal_gives_up(box):
+    # The Mac app has no Ctrl-C: if nothing's been copied, say so, don't hang.
+    box.runtimes("docker")
+    clipboard(box, ["something else"])
+    r = box.tv("join", "--login", "sam", "--name", "Sam", "--email", "s@example.org",
+               "--from-clipboard", TV_POLL="0")
+    assert r.returncode == 2
+    assert "copy" in (r.stdout + r.stderr).lower()
+    assert not [c for c in box.calls() if len(c) > 1 and c[1] == "run"]

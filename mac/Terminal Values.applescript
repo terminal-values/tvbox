@@ -76,9 +76,9 @@ on join()
 	set login to askFor("Your login name (short, lowercase, like sam):", false)
 	set fullName to askFor("Your name, as it should appear in TV's history:", false)
 	set email to askFor("Your email:", false)
-	set invitation to askFor("Paste the invitation from Danny (it won't show):", true)
+	tellThem("Now copy the invitation Danny sent you: in Signal, select the whole line (it starts tvjoin:) and copy it. Then click OK. You don't paste it anywhere: the app takes it from the clipboard, and clears the clipboard after.")
 	try
-		set out to do shell script "printf '%s' " & quoted form of invitation & " | " & tvCommand("join --login " & quoted form of login & " --name " & quoted form of fullName & " --email " & quoted form of email)
+		set out to do shell script tvCommand("join --from-clipboard --login " & quoted form of login & " --name " & quoted form of fullName & " --email " & quoted form of email & " </dev/null")
 	on error errText
 		fail("That didn't work:" & return & return & errText & return & return & "Click the app again to retry, or ask in TV Signal.")
 		return

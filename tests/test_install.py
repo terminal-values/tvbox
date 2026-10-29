@@ -164,3 +164,14 @@ def test_without_a_terminal_it_finishes_and_says_what_is_next(home):
                        stdin=subprocess.DEVNULL, start_new_session=True)
     assert r.returncode == 0, r.stdout + r.stderr
     assert "tv join" in r.stdout
+
+
+def test_mac_app_takes_the_invitation_from_the_clipboard():
+    # The final review: pasted into a dialog, the invitation then sat in a
+    # shell command line that other users' ps can see.
+    src = (ROOT / "mac" / "Terminal Values.applescript").read_text()
+    join = src[src.index("on join()"):src.index("end join")]
+    assert "--from-clipboard" in join
+    assert "invitation" not in join.replace("the invitation", "").replace("Invitation", "") \
+        or "quoted form of invitation" not in join
+    assert "hidden answer" not in join
