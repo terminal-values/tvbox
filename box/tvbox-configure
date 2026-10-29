@@ -24,6 +24,8 @@ Host tvhome tvhome.*
     User $TV_LOGIN
     ProxyCommand tailscale nc %h %p
     StrictHostKeyChecking accept-new
+    # Not "Permanently added ... to the list of known hosts" on first use.
+    LogLevel ERROR
 EOF
 fi
 

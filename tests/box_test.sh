@@ -77,7 +77,8 @@ else
     fail "the folder's .stignore isn't box/stignore"
 fi
 if inbox grep -q 'ProxyCommand tailscale nc %h %p' /state/home/.ssh/config 2>/dev/null &&
-   inbox grep -q 'User tvtest' /state/home/.ssh/config; then
+   inbox grep -q 'User tvtest' /state/home/.ssh/config &&
+   inbox grep -q 'LogLevel ERROR' /state/home/.ssh/config; then
     ok "ssh reaches tvhome through Tailscale, as the member"
 else
     fail "the ssh config is missing or wrong"
