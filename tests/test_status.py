@@ -98,3 +98,11 @@ def test_not_connected_on_the_tailnet_mentions_stage_3(status):
     r = status(connected=False)
     assert r.returncode == 1
     assert "Not connected to tvhome's Syncthing" in r.stdout and "stage 3" in r.stdout
+
+
+def test_before_tvhome_has_sent_its_list_it_doesnt_claim_up_to_date(status):
+    # Found in the Linux run: a new machine said "Up to date with tvhome
+    # (0 files)" before it had heard what tvhome has.
+    r = status(local={**DONE_LOCAL, "globalFiles": 0}, remote=DONE_REMOTE)
+    assert "Up to date" not in r.stdout
+    assert "Waiting for tvhome's list of TV's documents" in r.stdout

@@ -44,5 +44,9 @@ if [ "$need" -gt 0 ]; then
     echo "Getting TV's documents from tvhome: $need of $global files to go ($mb MB)."
 fi
 [ "$sending" -gt 0 ] && echo "Sending your changes to tvhome: $sending files to go."
-[ "$need" -eq 0 ] && [ "$sending" -eq 0 ] && echo "Up to date with tvhome ($global files)."
+if [ "$need" -eq 0 ] && [ "$sending" -eq 0 ]; then
+    # TV's folder is never empty: none at all means tvhome's list hasn't come yet.
+    if [ "$global" -eq 0 ]; then echo "Waiting for tvhome's list of TV's documents."
+    else echo "Up to date with tvhome ($global files)."; fi
+fi
 exit "$bad"
