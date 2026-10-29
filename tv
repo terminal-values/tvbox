@@ -272,10 +272,13 @@ cmd_join() {
     if [ -z "$name" ] && [ -t 0 ]; then printf 'Your name, as it should appear in TV'"'"'s history: '; read -r name || true; fi
     if [ -z "$email" ] && [ -t 0 ]; then printf 'Your email: '; read -r email || true; fi
     why=
+    # Joining again (a new invitation) keeps the folder this computer has.
+    [ -n "$folder" ] || folder=$FOLDER
     [ -n "$folder" ] || default_folder
-    # A folder holding only Syncthing's markers is one an earlier join made.
+    # A folder holding only Syncthing's markers is one an earlier join made,
+    # and the one in the config is TV's whatever it holds.
     if [ -d "$folder" ] && [ -n "$(ls -A "$folder" | grep -vxE '\.stfolder|\.stignore|\.DS_Store')" ] &&
-       [ ! -e "$folder/.git" ] &&
+       [ ! -e "$folder/.git" ] && [ "$folder" != "$FOLDER" ] &&
        [ "$adopt" = no ]; then
         die 2 "$folder already has files in it, and isn't a TV folder. Pick another
 with --folder, or use it anyway with: tv join --adopt --folder $folder"

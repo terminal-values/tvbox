@@ -579,3 +579,20 @@ def test_join_pins_the_newest_published_box(box, unbuilt, digest, revision):
     text = box.config.read_text()
     assert f"IMAGE='ghcr.io/terminal-values/tvbox@sha256:{digest}'" in text
     assert f"REVISION='{revision}'" in text
+
+
+def test_joining_again_keeps_the_folder_it_has(box):
+    # The final review: a second tv join (a new invitation, say) on a computer
+    # whose folder is elsewhere made an empty one in Documents and mounted it.
+    box.runtimes("podman")
+    elsewhere = box.home / "Private" / "terminalvalues"
+    (elsewhere / "doc").mkdir(parents=True)
+    (elsewhere / "doc" / "a.md").write_text("hi")
+    # No .git yet: a member who hasn't caught up. It's still TV's folder.
+    (box.home / "Documents").mkdir()
+    box.configure(FOLDER=str(elsewhere))
+    r = box.tv("join", "--login", "sam", input=INVITE)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert f"FOLDER='{elsewhere}'" in box.config.read_text()
+    assert f"{elsewhere}:/home/tv/terminalvalues" in box.call("run")
+    assert not (box.home / "Documents" / "terminalvalues").exists()
