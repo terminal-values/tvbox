@@ -893,3 +893,10 @@ def test_status_json_from_an_older_box_is_still_json(box):
                FAKE_EXEC_OUT="On TV's tailnet.\nUp to date with tvhome (12 files).")
     out = json.loads(r.stdout)
     assert out["box"] == "running" and out["tailnet"] is None and out["sync"] is None
+
+
+def test_status_json_says_which_box_this_is(box):
+    box.runtimes("docker")
+    box.configure(REVISION="c" * 40)
+    out = json.loads(box.tv("status", "--json", FAKE_STATE="stopped").stdout)
+    assert out["revision"] == "c" * 40

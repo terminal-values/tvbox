@@ -31,6 +31,8 @@ struct Status: Codable, Sendable, Equatable {
     var name: String
     var folder: String
     var port: Int
+    /// The commit the box was built from (absent from an older tv).
+    var revision: String? = nil
     var tailnet: TailnetState?
     var sync: Sync?
 }

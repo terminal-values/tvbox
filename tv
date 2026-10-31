@@ -391,9 +391,9 @@ status_json() {
             case $inside in "{"*) ;; *) inside='{"tailnet": null, "sync": null}' ;; esac
         fi
     fi
-    printf '{"box": %s, "runtime": %s, "runtime_running": %s, "login": %s, "name": %s, "folder": %s, "port": %s, ' \
+    printf '{"box": %s, "runtime": %s, "runtime_running": %s, "login": %s, "name": %s, "folder": %s, "port": %s, "revision": %s, ' \
         "$(json_str "$box")" "$(json_str "$rt")" "$up" "$(json_str "$LOGIN")" "$(json_str "$NAME")" \
-        "$(json_str "$FOLDER")" "${PORT:-0}"
+        "$(json_str "$FOLDER")" "${PORT:-0}" "$(json_str "$REVISION")"
     # The box's object, without its braces, completes this one.
     printf '%s\n' "$inside" | tr -d '\n' | sed 's/^[[:space:]]*{//; s/}[[:space:]]*$//'
     printf '}\n'

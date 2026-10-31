@@ -6,6 +6,8 @@ struct MainWindow: View {
     @Bindable var model: AppModel
     let terminal: TerminalSession
     @Bindable var walk: WalkthroughController
+    var canUpdate = false
+    var checkForUpdates: () -> Void = {}
     @State private var reviewing = false
     @Environment(\.openWindow) private var openWindow
 
@@ -49,13 +51,17 @@ struct MainWindow: View {
                 RecentSection(model: model)
             }
             .formStyle(.grouped)
-            FooterView(model: model, openDoctor: { openWindow(id: "doctor") })
+            FooterView(model: model, openDoctor: { openWindow(id: "doctor") },
+                       canUpdate: canUpdate, checkForUpdates: checkForUpdates)
         }
         .frame(width: 400)
         .frame(minHeight: 720)
         .onAppear { model.windowVisible(true) }
         .onDisappear { model.windowVisible(false) }
         .sheet(isPresented: $reviewing) { ChangesSheet(model: model) }
+        .onChange(of: model.updateRequested) {
+            if model.updateRequested { model.updateRequested = false; checkForUpdates() }
+        }
         .onChange(of: model.reviewRequested) {
             if model.reviewRequested { model.reviewRequested = false; reviewing = true }
         }

@@ -1,0 +1,62 @@
+# Terminal Values.app: on a version tag (v0.1.0...), mac/scripts/release.sh
+# builds it, signs it with the Developer ID, notarizes it, packs the .dmg and
+# Sparkle's feed, and this publishes them as the GitHub release, where the app
+# looks for updates (releases/latest/download/appcast.xml).
+#
+# Repository secrets: MAC_CERT_P12 (the Developer ID Application certificate
+# and key, base64), MAC_CERT_PASSWORD, NOTARY_KEY_P8 (base64), NOTARY_KEY_ID,
+# NOTARY_ISSUER_ID, SPARKLE_PRIVATE_KEY. Repository variables (not secret):
+# TEAM_ID, SPARKLE_PUBLIC_KEY.
+name: app
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+jobs:
+  app:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: brew install xcodegen
+      - name: The signing identity, in a keychain of its own
+        env:
+          MAC_CERT_P12: ${{ secrets.MAC_CERT_P12 }}
+          MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+        run: |
+          kc="$RUNNER_TEMP/build.keychain"
+          security create-keychain -p ci "$kc"
+          security set-keychain-settings -lut 3600 "$kc"
+          security unlock-keychain -p ci "$kc"
+          security list-keychains -d user -s "$kc" $(security list-keychains -d user | tr -d '"')
+          printf '%s' "$MAC_CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$kc" -P "$MAC_CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k ci "$kc" >/dev/null
+          rm "$RUNNER_TEMP/cert.p12"
+      - name: Sparkle's tools, the same version as the app's
+        run: |
+          mkdir -p "$RUNNER_TEMP/sparkle"
+          curl -fsSL https://github.com/sparkle-project/Sparkle/releases/download/2.10.1/Sparkle-2.10.1.tar.xz |
+            tar -xJ -C "$RUNNER_TEMP/sparkle"
+      - name: Build, sign, notarize, pack
+        env:
+          TEAM_ID: ${{ vars.TEAM_ID }}
+          SPARKLE_PUBLIC_KEY: ${{ vars.SPARKLE_PUBLIC_KEY }}
+          NOTARY_KEY_P8: ${{ secrets.NOTARY_KEY_P8 }}
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER: ${{ secrets.NOTARY_ISSUER_ID }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          printf '%s' "$NOTARY_KEY_P8" | base64 --decode > "$RUNNER_TEMP/notary.p8"
+          printf '%s' "$SPARKLE_PRIVATE_KEY" > "$RUNNER_TEMP/sparkle.key"
+          NOTARY_KEY="$RUNNER_TEMP/notary.p8" SPARKLE_PRIVATE_KEY_FILE="$RUNNER_TEMP/sparkle.key" \
+            SPARKLE_BIN="$RUNNER_TEMP/sparkle/bin" sh mac/scripts/release.sh "${GITHUB_REF_NAME#v}"
+          rm -f "$RUNNER_TEMP/notary.p8" "$RUNNER_TEMP/sparkle.key"
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" mac/build/release/feed/*.dmg mac/build/release/feed/appcast.xml \
+            --title "Terminal Values $GITHUB_REF_NAME" --generate-notes

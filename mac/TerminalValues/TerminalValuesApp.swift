@@ -1,4 +1,5 @@
 import AppKit
+import Sparkle
 import SwiftUI
 
 @main
@@ -13,7 +14,8 @@ struct TerminalValuesApp: App {
             MenuLabel(model: delegate.model)
         }
         Window("Terminal Values", id: "main") {
-            MainWindow(model: delegate.model, terminal: delegate.terminal, walk: delegate.walkthrough)
+            MainWindow(model: delegate.model, terminal: delegate.terminal, walk: delegate.walkthrough,
+                       canUpdate: delegate.updatesOn, checkForUpdates: delegate.checkForUpdates)
         }
         Window("The Doctor", id: "doctor") {
             DoctorView(doctor: delegate.doctor)
@@ -37,6 +39,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     lazy var walkthrough = WalkthroughController(model: model)
     let tutorial = TutorialProgress()
     lazy var doctor = Doctor(model: model)
+    /// Sparkle, for the app's own updates (and with them, its tv and box).
+    let updater = SPUStandardUpdaterController(startingUpdater: false, updaterDelegate: nil, userDriverDelegate: nil)
+    /// Only a release build carries Sparkle's public key.
+    var updatesOn: Bool {
+        !((Bundle.main.object(forInfoDictionaryKey: "SUPublicEDKey") as? String) ?? "").isEmpty
+    }
+    func checkForUpdates() { if updatesOn { updater.checkForUpdates(nil) } }
     private var quitting = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -44,8 +53,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil { return }
         moveIn()
         let atLogin = Self.launchedAtLogin()
+        if updatesOn { updater.startUpdater() }
         Task {
             await model.launch(atLogin: atLogin)
+            // After an app update, the box follows to the image this release pins.
+            _ = await moveBoxIfNeeded(model: model, pinned: BoxImage.read())
             model.startPolling()
         }
         // Opened by hand (not at login): show the window.
