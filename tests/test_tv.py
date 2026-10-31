@@ -755,3 +755,64 @@ def test_changes_and_a_pinned_catch_up_run_in_the_box(box):
     box.log.write_text("")
     box.tv("catch-up", "--yes", "--to", "abc", "--secrets-to", "def", FAKE_STATE="running")
     assert box.call("exec")[-6:] == ["tvbox-catch-up", "--yes", "--to", "abc", "--secrets-to", "def"]
+
+
+# --- identity and update, for the Mac app -----------------------------------
+
+def test_identity_json(box):
+    box.runtimes("docker")
+    box.configure()
+    r = box.tv("identity", "--json", FAKE_STATE="running",
+               FAKE_EXEC_OUT=f'{{"syncthing": "{STID}", "age": "age1abc"}}')
+    assert r.returncode == 0, r.stderr
+    assert json.loads(r.stdout) == {"login": "sam", "syncthing": STID, "age": "age1abc"}
+    assert box.call("exec")[-1] == "tvbox-identity"
+
+
+def test_update_check_json_lists_commits(box):
+    updatable(box)
+    r = box.tv("update", "--check", "--json", FAKE_STATE="running")
+    assert r.returncode == 0, r.stderr
+    assert json.loads(r.stdout) == {"current": OLD, "latest": NEW, "available": True,
+                                    "commits": ["Make the box smaller", "Fix tv status"]}
+    assert not [c for c in box.calls() if c[1] in ("rm", "run")]
+
+
+def test_update_check_json_when_current(box):
+    updatable(box, revision=NEW)
+    out = json.loads(box.tv("update", "--check", "--json", FAKE_STATE="running").stdout)
+    assert out["available"] is False and out["commits"] == []
+
+
+def test_update_yes_doesnt_ask(box):
+    updatable(box)
+    r = box.tv("update", "--yes", FAKE_STATE="running")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "Update to it?" not in r.stdout
+    assert f"REVISION='{NEW}'" in box.config.read_text()
+
+
+def test_update_to_moves_to_that_image_without_github(box):
+    updatable(box)
+    (box.bin / "curl").unlink()  # any GitHub lookup would fail
+    r = box.tv("update", "--to", "sha256:pinned", "--revision", "c" * 40, FAKE_STATE="running")
+    assert r.returncode == 0, r.stdout + r.stderr
+    text = box.config.read_text()
+    assert "IMAGE='ghcr.io/terminal-values/tvbox@sha256:pinned'" in text and f"REVISION='{'c' * 40}'" in text
+    assert box.call("run")[-1] == "ghcr.io/terminal-values/tvbox@sha256:pinned"
+
+
+def test_update_leaves_a_symlinked_tv_alone(box, tmp_path):
+    # With the Mac app, ~/.local/bin/tv links into the app, which updates it.
+    updatable(box)
+    app_tv = tmp_path / "Terminal Values.app/Contents/Resources/tv"
+    app_tv.parent.mkdir(parents=True)
+    shutil.copy(TV, app_tv)
+    link = box.home / ".local/bin/tv"
+    link.parent.mkdir(parents=True)
+    link.symlink_to(app_tv)
+    e = {"PATH": str(box.bin), "HOME": str(box.home), "TV_CONFIG": str(box.config),
+         "FAKE_LOG": str(box.log), "FAKE_STATE": "running"}
+    r = subprocess.run([SH, str(link), "update", "--yes"], env=e, capture_output=True, text=True)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert link.is_symlink() and app_tv.read_text() == TV.read_text()

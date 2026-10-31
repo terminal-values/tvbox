@@ -159,6 +159,14 @@ else
     fail "import-key --replace doesn't behave"
 fi
 
+# The three lines Danny needs: tvbox-identity gives the Syncthing ID and the
+# public half of the age key (one exists by now, from import-key above).
+me=$(inbox tvbox-identity 2>/dev/null)
+if printf '%s' "$me" | jq -e '(.syncthing | test("^([A-Z2-7]{7}-){7}[A-Z2-7]{7}$")) and (.age | startswith("age1"))' >/dev/null 2>&1; then
+    ok "tvbox-identity gives the Syncthing ID and the age key's public half"
+else
+    fail "tvbox-identity said: $me"
+fi
 # Stopping the box stops its daemons properly, so tvhome sees Syncthing
 # hang up instead of waiting on a dead connection.
 $RT stop "$NAME" >/dev/null 2>&1

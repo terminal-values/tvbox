@@ -39,8 +39,9 @@ echo
 echo "You're on TV's tailnet. Send these three lines to Danny:"
 echo
 echo "login: $login"
-echo "syncthing: $(syncthing serve --home=/state/syncthing --device-id)"
-echo "age: $(age-keygen -y "$ids")"
+me=$(tvbox-identity)
+echo "syncthing: $(printf '%s' "$me" | jq -r .syncthing)"
+echo "age: $(printf '%s' "$me" | jq -r .age)"
 echo
 if [ "${made:-}" = yes ]; then
     echo "Your secret key is new. Save a copy somewhere safe now, such as your"

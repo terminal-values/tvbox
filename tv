@@ -444,6 +444,22 @@ to_bytes() {
         printf "%.0f", n * (u in m ? m[u] : 1) }'
 }
 
+# tv identity [--json]: the three lines Danny needs to let this box in.
+cmd_identity() {
+    need_box
+    me=$(in_box tvbox-identity) || die 1 "Couldn't read the box's identity."
+    sid=$(printf '%s' "$me" | sed -n 's/.*"syncthing": *"\([^"]*\)".*/\1/p')
+    age=$(printf '%s' "$me" | sed -n 's/.*"age": *"\([^"]*\)".*/\1/p')
+    if [ "${1:-}" = --json ]; then
+        printf '{"login": %s, "syncthing": %s, "age": %s}\n' "$(json_str "$LOGIN")" \
+            "$(json_str "$sid")" "$(json_str "$age")"
+    else
+        say "login: $LOGIN"
+        say "syncthing: $sid"
+        say "age: $age"
+    fi
+}
+
 cmd_pages() {
     need_box
     url=http://127.0.0.1:$PORT/$(printf '%s' "${1:-}" | sed 's:^/*::; s/ /%20/g')
@@ -562,12 +578,51 @@ cmd_uninstall() {
     say "tv is uninstalled.${FOLDER:+ The TV folder, $FOLDER, is still there.}"
 }
 
+# tv update [--yes]: a newer box, showing its commits and asking first.
+#   --check [--json]          is there one? (changes nothing)
+#   --to DIGEST --revision C  move to exactly that image, no lookup (the Mac
+#                             app, after its own update, uses the image its
+#                             release was built with)
 cmd_update() {
+    yes=no check=no json=no to= rev=
+    while [ $# -gt 0 ]; do
+        case $1 in
+            --yes) yes=yes ;;
+            --check) check=yes ;;
+            --json) json=yes ;;
+            --to) to=${2:-}; shift ;;
+            --revision) rev=${2:-}; shift ;;
+            *) die 2 "tv update: unknown option $1" ;;
+        esac
+        shift
+    done
     need_config
     runtime_up
+    if [ -n "$to" ]; then
+        [ -n "$rev" ] || die 2 "tv update --to needs --revision too."
+        IMAGE=$REGISTRY@$to REVISION=$rev
+        replace_box
+        say "Updated. Your folder, key and secrets are as they were."
+        return
+    fi
     command -v curl >/dev/null 2>&1 || die 1 "tv update needs curl."
     new=$(latest_revision)
     [ -n "$new" ] || die 1 "Couldn't reach GitHub to check for a newer box."
+    if [ "$check" = yes ]; then
+        list=
+        if [ "$new" != "$REVISION" ] && [ -n "$REVISION" ]; then
+            list=$(changes "$REVISION" "$new" | sed 's/^  //' | while IFS= read -r line; do
+                printf '%s, ' "$(json_str "$line")"; done)
+        fi
+        if [ "$json" = yes ]; then
+            if [ -n "$REVISION" ]; then cur=$(json_str "$REVISION"); else cur=null; fi
+            avail=false; [ "$new" != "$REVISION" ] && avail=true
+            printf '{"current": %s, "latest": %s, "available": %s, "commits": [%s]}\n' \
+                "$cur" "$(json_str "$new")" "$avail" "${list%, }"
+        elif [ "$new" = "$REVISION" ]; then say "The box is up to date."
+        else say "There's a newer box: tv update"; fi
+        return
+    fi
     if [ "$new" = "$REVISION" ]; then
         say "The box is up to date."
         return
@@ -577,22 +632,30 @@ cmd_update() {
     say "There's a newer box. What changed:"
     if [ -n "$REVISION" ]; then changes "$REVISION" "$new"
     else say "  (this box's version wasn't recorded, so the changes can't be listed)"; fi
-    printf 'Update to it? [y/N] '
-    read -r answer || true
-    case $answer in [yY]*) ;; *) say "Left as it was."; return ;; esac
+    if [ "$yes" = no ]; then
+        printf 'Update to it? [y/N] '
+        read -r answer || true
+        case $answer in [yY]*) ;; *) say "Left as it was."; return ;; esac
+    fi
     IMAGE=$REGISTRY@$digest REVISION=$new
+    replace_box
+    # tv updates itself too, from the same commit; but not a link into the
+    # Mac app, which updates itself and the tv inside it.
+    if [ "$0" = "$HOME/.local/bin/tv" ] && [ ! -L "$0" ] &&
+       curl -fsSL "https://raw.githubusercontent.com/terminal-values/tvbox/$new/tv" -o "$0.new"; then
+        chmod 755 "$0.new" && mv -f "$0.new" "$0"
+    fi
+    say "Updated. Your folder, key and secrets are as they were."
+}
+
+# Remake the box from IMAGE (its storage, and so the key, is kept).
+replace_box() {
     write_config
     if [ "$(box_state)" != absent ]; then
         "$RT" stop "$BOX" >/dev/null 2>&1
         "$RT" rm "$BOX" >/dev/null || die 1 "Couldn't remove the old box."
     fi
     create_box || die 1 "The new box wouldn't start (see above). Your folder, key and secrets are as they were."
-    # tv updates itself too, from the same commit.
-    if [ "$0" = "$HOME/.local/bin/tv" ] &&
-       curl -fsSL "https://raw.githubusercontent.com/terminal-values/tvbox/$new/tv" -o "$0.new"; then
-        chmod 755 "$0.new" && mv -f "$0.new" "$0"
-    fi
-    say "Updated. Your folder, key and secrets are as they were."
 }
 
 usage() {
@@ -615,6 +678,7 @@ tv: Terminal Values' box.
   tv import-key    bring in your saved age key (tv import-key < file)
   tv export-key F  save a copy of your age key to file F
   tv update        get a newer box, showing what changed first
+  tv identity      the three lines Danny needs to let this box in
   tv folder        print where the TV folder is
   tv move FOLDER   move the TV folder somewhere else
   tv uninstall     remove the box and tv
@@ -629,6 +693,7 @@ case $cmd in
     stop) cmd_stop ;;
     status) cmd_status "$@" ;;
     stats) cmd_stats "$@" ;;
+    identity) cmd_identity "$@" ;;
     catch-up) need_box; in_box tvbox-catch-up "$@" ;;
     changes) need_box; in_box tvbox-catch-up --changes "$@" ;;
     push) need_box; in_box tvbox-push ;;
@@ -642,12 +707,12 @@ case $cmd in
     move) cmd_move "$@" ;;
     check) cmd_check ;;
     runtime-start) cmd_runtime_start ;;
-    update) cmd_update ;;
+    update) cmd_update "$@" ;;
     uninstall) cmd_uninstall "$@" ;;
     help|-h|--help) usage ;;
     *)  # A near miss gets a suggestion: tv catchup, tv catch_up, tv Status.
         near=$(printf '%s' "$cmd" | tr 'A-Z_' 'a-z-')
-        for c in join start stop status stats catch-up changes push git passage run shell pages \
+        for c in join start stop status stats identity catch-up changes push git passage run shell pages \
                  import-key export-key folder move update uninstall; do
             [ "$(printf '%s' "$c" | tr -d -)" = "$(printf '%s' "$near" | tr -d -)" ] && near=$c && break
             c=

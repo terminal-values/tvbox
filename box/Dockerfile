@@ -30,7 +30,7 @@ RUN git clone -q https://github.com/FiloSottile/passage /tmp/passage \
 
 COPY --from=uv /uv /uvx /usr/local/bin/
 
-COPY tvbox-init tvbox-user tvbox-configure tvbox-join tvbox-status tvbox-pages \
+COPY tvbox-init tvbox-user tvbox-configure tvbox-join tvbox-identity tvbox-status tvbox-pages \
      tvbox-catch-up tvbox-push tvbox-import-key /usr/local/bin/
 COPY stignore /etc/tvbox/
 RUN chmod 755 /usr/local/bin/tvbox-* \

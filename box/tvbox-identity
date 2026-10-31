@@ -1,0 +1,10 @@
+#!/bin/sh
+# tvbox-identity: this box's Syncthing device ID and the public half of the
+# member's age key, as JSON: two of the three lines Danny needs (tv join
+# prints them, and the Mac app shows them again).
+set -u
+ids=$HOME/.passage/identities
+syncthing=$(syncthing serve --home=/state/syncthing --device-id 2>/dev/null)
+age=
+[ -s "$ids" ] && age=$(age-keygen -y "$ids" 2>/dev/null)
+jq -n --arg syncthing "$syncthing" --arg age "$age" '{syncthing: $syncthing, age: $age}'
