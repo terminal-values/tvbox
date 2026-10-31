@@ -30,6 +30,8 @@ final class AppModel {
     /// Set to ask for the main window; the menu bar icon's view opens it,
     /// since only SwiftUI views can open a window scene.
     var wantsWindow = false
+    /// The walkthrough has finished: time for the tutorial.
+    var tutorialRequested = false
     var lastError: String?
 
     /// Joined: tv knows a login for this computer.

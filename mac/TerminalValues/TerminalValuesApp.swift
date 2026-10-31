@@ -13,7 +13,7 @@ struct TerminalValuesApp: App {
             MenuLabel(model: delegate.model)
         }
         Window("Terminal Values", id: "main") {
-            MainWindow(model: delegate.model, terminal: delegate.terminal)
+            MainWindow(model: delegate.model, terminal: delegate.terminal, walk: delegate.walkthrough)
         }
         .windowResizability(.contentSize)
     }
@@ -26,6 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The window's terminal, kept for the app's life so closing the window
     /// doesn't end a command running in it.
     let terminal = TerminalSession(tvDirectory: Bundle.main.resourceURL!)
+    lazy var walkthrough = WalkthroughController(model: model)
     private var quitting = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {

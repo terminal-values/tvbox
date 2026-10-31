@@ -5,10 +5,22 @@ import SwiftUI
 struct MainWindow: View {
     @Bindable var model: AppModel
     let terminal: TerminalSession
+    @Bindable var walk: WalkthroughController
     var openDoctor: () -> Void = {}
     @State private var reviewing = false
 
     var body: some View {
+        Group {
+            if walk.shouldShow {
+                WalkthroughView(walk: walk)
+            } else {
+                everyday
+            }
+        }
+        .task { if model.status == nil { await walk.resume() } }
+    }
+
+    private var everyday: some View {
         VStack(spacing: 0) {
             header
             Form {
