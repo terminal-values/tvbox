@@ -55,3 +55,22 @@ import Testing
         #expect(fm.fileExists(atPath: decoy.path))
     }
 }
+
+@Suite struct MigrationSafetyTests {
+    // The final review: a .zshrc that isn't UTF-8 was read as empty and
+    // overwritten with the one PATH line.
+    @Test func neverOverwritesAStartupFileItCantRead() throws {
+        let fm = FileManager.default
+        let home = fm.temporaryDirectory.appendingPathComponent("mig-\(UUID().uuidString)")
+        try fm.createDirectory(at: home.appendingPathComponent(".local/bin"), withIntermediateDirectories: true)
+        let bundled = home.appendingPathComponent("tv")
+        try Data("#!/bin/sh\n".utf8).write(to: bundled)
+        let latin1 = Data("alias caf\u{e9}=ls\n".data(using: .isoLatin1)!)
+        let rc = home.appendingPathComponent(".zshrc")
+        try latin1.write(to: rc)
+        _ = try migrate(home: home, bundledTV: bundled, shell: "/bin/zsh")
+        let after = try Data(contentsOf: rc)
+        #expect(after.starts(with: latin1))
+        #expect(String(decoding: after.dropFirst(latin1.count), as: UTF8.self).contains("# added by the tvbox installer"))
+    }
+}

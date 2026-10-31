@@ -25,11 +25,21 @@ func migrate(home: URL, bundledTV: URL, shell: String) throws -> [String] {
     default: ".profile"
     }
     let rc = home.appendingPathComponent(rcName)
-    let text = (try? String(contentsOf: rc, encoding: .utf8)) ?? ""
-    if !text.contains(mark) && !text.contains(".local/bin") {
-        let line = "export PATH=\"$HOME/.local/bin:$PATH\"  \(mark)\n"
-        let joined = text.isEmpty || text.hasSuffix("\n") ? text + line : text + "\n" + line
-        try joined.write(to: rc, atomically: false, encoding: .utf8)  // in place: it may be a link (stow)
+    // As bytes: a startup file needn't be UTF-8, and is only ever appended to,
+    // in place (it may be a link, from stow), never rewritten.
+    let bytes = (try? Data(contentsOf: rc)) ?? Data()
+    let has = { (needle: String) in bytes.range(of: Data(needle.utf8)) != nil }
+    if !has(mark) && !has(".local/bin") {
+        var line = "export PATH=\"$HOME/.local/bin:$PATH\"  \(mark)\n"
+        if let last = bytes.last, last != UInt8(ascii: "\n") { line = "\n" + line }
+        if fm.fileExists(atPath: rc.path) {
+            let handle = try FileHandle(forWritingTo: rc)
+            try handle.seekToEnd()
+            try handle.write(contentsOf: Data(line.utf8))
+            try handle.close()
+        } else {
+            try Data(line.utf8).write(to: rc)
+        }
         said.append("Added ~/.local/bin to your PATH, in ~/\(rcName), so terminals find tv.")
     }
 
