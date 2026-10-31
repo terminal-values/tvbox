@@ -29,6 +29,10 @@ enum TutorialItem: String, CaseIterable, Sendable {
 /// work; 2 and 3 when the member says so.
 @MainActor @Observable
 final class TutorialProgress {
+    /// Off for now (2026-10-31): it isn't clear enough what to do, and its
+    /// sheets cover the terminal. Nothing opens it while this is false.
+    nonisolated static let enabled = false
+
     private let defaults: UserDefaults
     private let fetch: @Sendable (URL) async -> Int
     private(set) var done: Set<TutorialItem>

@@ -46,3 +46,17 @@ import Testing
         #expect(!tour.allDone)
     }
 }
+
+@MainActor @Suite struct TutorialOffTests {
+    // Danny, 2026-10-31: the tour isn't clear enough yet, and its sheets cover
+    // the terminal; off until it's reworked.
+    @Test func finishingSetupDoesntOpenTheTourWhileItsOff() async throws {
+        #expect(TutorialProgress.enabled == false)
+        let fake = try FakeTV(answers: ["check": "running\n", "status": Fixture.statusRunning])
+        let model = AppModel(tv: fake.tv)
+        let walk = WalkthroughController(model: model, defaults: UserDefaults(suiteName: "tv-tests-\(UUID().uuidString)")!)
+        walk.finish()
+        #expect(!model.tutorialRequested)
+        #expect(!walk.shouldShow || model.status == nil)
+    }
+}

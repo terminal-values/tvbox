@@ -194,6 +194,6 @@ final class WalkthroughController {
     // 9. Done
     func finish() {
         set("walkthroughFinished")
-        model.tutorialRequested = true
+        if TutorialProgress.enabled { model.tutorialRequested = true }
     }
 }
