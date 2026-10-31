@@ -7,6 +7,7 @@
 d=${FAKETV_DIR:?FAKETV_DIR is not set}
 echo "$*" >> "$d/calls.log"
 [ -n "${FAKETV_SLEEP:-}" ] && sleep "$FAKETV_SLEEP"
+[ -n "${FAKETV_SLEEP:-}" ] && echo "finished $*" >> "$d/finished.log"
 if [ -n "${FAKETV_JUNK:-}" ]; then echo "Error: something that is not JSON"; exit 0; fi
 cmd=${1:-help}
 n=$(grep -c "^$cmd\( \|$\)" "$d/calls.log")

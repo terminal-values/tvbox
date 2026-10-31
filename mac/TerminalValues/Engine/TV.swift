@@ -54,10 +54,6 @@ actor TV {
         process.standardError = err
         process.standardInput = input
 
-        let box = ProcessBox(process)
-        let ended = AsyncStream<Void> { continuation in
-            process.terminationHandler = { _ in continuation.yield(); continuation.finish() }
-        }
         try process.run()
         // Read both pipes while it runs, so a full pipe can't stall it.
         async let stdoutData = Self.readAll(out.fileHandleForReading)
@@ -65,19 +61,11 @@ actor TV {
         if let stdin { try? input.fileHandleForWriting.write(contentsOf: stdin) }
         try? input.fileHandleForWriting.close()
 
-        let finished = await withTaskGroup(of: Bool.self) { group in
-            group.addTask { for await _ in ended {}; return true }
-            group.addTask { try? await Task.sleep(for: timeout); return false }
-            let first = await group.next() ?? false
-            group.cancelAll()
-            return first
-        }
-        if !finished {
-            box.terminate()
-            _ = await (stdoutData, stderrData)
-            throw TVError.timedOut(args)
-        }
+        // Cancellation (a window closing, Quit) doesn't stop tv: a half-done
+        // catch-up or join is worse than a wasted one. Only the time limit does.
+        let exited = await waitForExit(process, timeout: timeout)
         let (o, e) = await (stdoutData, stderrData)
+        guard exited else { throw TVError.timedOut(args) }
         return TVResult(status: process.terminationStatus,
                         stdout: String(decoding: o, as: UTF8.self),
                         stderr: String(decoding: e, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines))
@@ -104,14 +92,55 @@ actor TV {
         return state
     }
 
+    /// A blocking read, on a dispatch thread rather than Swift's shared pool,
+    /// so many runs at once can't starve it.
     private static func readAll(_ handle: FileHandle) async -> Data {
-        await Task.detached { (try? handle.readToEnd()) ?? Data() }.value
+        await withCheckedContinuation { done in
+            DispatchQueue.global().async { done.resume(returning: (try? handle.readToEnd()) ?? Data()) }
+        }
     }
 }
 
-/// Process isn't Sendable; this lets the timeout stop it.
-private final class ProcessBox: @unchecked Sendable {
-    let process: Process
-    init(_ process: Process) { self.process = process }
-    func terminate() { if process.isRunning { process.terminate() } }
+/// Waits for a running process to exit, or for the time limit, whichever is
+/// first, and ignores task cancellation. True if it exited by itself; false if
+/// the time ran out, in which case it's terminated and waited for, so either
+/// way its exit status is readable afterwards.
+func waitForExit(_ process: Process, timeout: Duration) async -> Bool {
+    let first = FirstOf()
+    let exited: Bool = await withCheckedContinuation { done in
+        first.set(done)
+        process.terminationHandler = { _ in first.resume(true) }
+        if !process.isRunning { first.resume(true) }  // gone before the handler was set
+        let (secs, atto) = timeout.components
+        DispatchQueue.global().asyncAfter(deadline: .now() + Double(secs) + Double(atto) / 1e18) {
+            first.resume(false)
+        }
+    }
+    if !exited {
+        process.terminate()
+        await withCheckedContinuation { done in
+            DispatchQueue.global().async { process.waitUntilExit(); done.resume() }
+        }
+    }
+    return exited
+}
+
+/// Resumes a continuation once: whichever of exit and time limit comes first.
+private final class FirstOf: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<Bool, Never>?
+    private var early: Bool?
+
+    func set(_ c: CheckedContinuation<Bool, Never>) {
+        lock.withLock {
+            if let early { c.resume(returning: early) } else { continuation = c }
+        }
+    }
+
+    func resume(_ value: Bool) {
+        lock.withLock {
+            if let c = continuation { continuation = nil; c.resume(returning: value) }
+            else if early == nil { early = value }
+        }
+    }
 }
