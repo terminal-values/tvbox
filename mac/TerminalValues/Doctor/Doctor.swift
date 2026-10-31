@@ -10,6 +10,13 @@ final class Doctor {
 
     init(model: AppModel) { self.model = model }
 
+    /// tv, told which box this release pins, so the check-up compares with that.
+    private var doctorTV: TV {
+        guard let pin = model.pinned else { return model.tv }
+        return TV(executable: model.tv.executable,
+                  environment: model.tv.environment.merging(["TV_PINNED_REVISION": pin.revision]) { $1 })
+    }
+
     static func fixTitle(_ fix: DoctorFix) -> String {
         switch fix {
         case .startRuntime: "Start the Runtime"
@@ -22,7 +29,7 @@ final class Doctor {
     func run() async {
         running = true
         defer { running = false }
-        report = try? await model.tv.json(DoctorReport.self, ["doctor", "--json"], timeout: .seconds(180))
+        report = try? await doctorTV.json(DoctorReport.self, ["doctor", "--json"], timeout: .seconds(180))
     }
 
     /// Makes the fix, then checks again.
@@ -33,13 +40,19 @@ final class Doctor {
             await model.refresh()
         case .startBox: await model.startBox()
         case .catchUp: model.reviewRequested = true
-        case .update: model.updateRequested = true
+        case .update:
+            // A box behind this release moves to it; otherwise, look for a newer app.
+            if model.pinned != nil, model.status?.revision != model.pinned?.revision {
+                _ = await moveBoxIfNeeded(model: model, pinned: model.pinned)
+            } else {
+                model.updateRequested = true
+            }
         }
         await run()
     }
 
     /// The report as words, to copy or save: tv doctor's own text.
     func reportText() async -> String {
-        (try? await model.tv.run(["doctor"], timeout: .seconds(180)))?.stdout ?? ""
+        (try? await doctorTV.run(["doctor"], timeout: .seconds(180)))?.stdout ?? ""
     }
 }

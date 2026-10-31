@@ -26,6 +26,9 @@ final class AppModel {
     var keyNotSaved = false
     /// The commit the box was built from, as tv update --check reports it.
     var boxRevision: String?
+    /// The box image this release of the app was built with (nil for a
+    /// development build). With it, the box to have is that one, not main's.
+    var pinned: BoxImage?
     var busy: String?
     /// Set to ask for the main window; the menu bar icon's view opens it,
     /// since only SwiftUI views can open a window scene.
@@ -86,6 +89,8 @@ final class AppModel {
             changes = c
             pendingCodeChanges = c.code.incoming.count
         }
+        // A release's updates come through Sparkle, with the box it pins.
+        guard pinned == nil else { updateAvailable = false; return }
         if let u = try? await tv.json(UpdateCheck.self, ["update", "--check", "--json"], timeout: .seconds(60)) {
             updateAvailable = u.available
             boxRevision = u.current

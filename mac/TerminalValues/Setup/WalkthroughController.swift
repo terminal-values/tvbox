@@ -97,9 +97,10 @@ final class WalkthroughController {
         while step == .invitation && !Task.isCancelled {
             let r: TVResult
             do {
-                r = try await model.tv.run(
-                    ["join", "--from-clipboard", "--login", login, "--name", name, "--email", email],
-                    timeout: .seconds(600))
+                var args = ["join", "--from-clipboard", "--login", login, "--name", name, "--email", email]
+                // A release joins with the box it was built with.
+                if let pin = model.pinned { args += ["--image", pin.digest, "--revision", pin.revision] }
+                r = try await model.tv.run(args, timeout: .seconds(600))
             } catch {
                 message = "\(error)"  // stop here, rather than try again at once
                 return

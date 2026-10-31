@@ -7,6 +7,7 @@ first) to $FAKE_LOG. Behaviour:
   FAKE_STATE=...       the box is running, stopped or absent (default absent)
   FAKE_RUN_FAILS=1     making the box fails (as when its port is taken)
   FAKE_EXEC_OUT=...    what exec prints
+  FAKE_PULL_FAILS=1    pulling an image fails (offline)
   stats                answers in each runtime's own --format json shape
 """
 import json
@@ -29,6 +30,9 @@ if down:
     sys.exit(125)
 if verb == "run" and os.environ.get("FAKE_RUN_FAILS") == "1":
     print("Error: bind: Address already in use", file=sys.stderr)
+    sys.exit(1)
+if (verb == "pull" or args[:2] == ["image", "pull"]) and os.environ.get("FAKE_PULL_FAILS") == "1":
+    print("Error: could not reach the registry", file=sys.stderr)
     sys.exit(1)
 if verb == "stats":
     if name == "container":

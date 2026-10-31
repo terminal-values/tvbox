@@ -258,7 +258,7 @@ invitation_from_clipboard() {
 }
 
 cmd_join() {
-    login= folder= adopt=no name=$NAME email=$EMAIL clip=no
+    login= folder= adopt=no name=$NAME email=$EMAIL clip=no image= rev=
     while [ $# -gt 0 ]; do
         case $1 in
             --login) login=${2:-}; shift ;;
@@ -267,6 +267,9 @@ cmd_join() {
             --folder) folder=${2:-}; shift ;;
             --adopt) adopt=yes ;;
             --from-clipboard) clip=yes ;;
+            # The box to use (the Mac app passes the one its release was built with).
+            --image) image=${2:-}; shift ;;
+            --revision) rev=${2:-}; shift ;;
             *) die 2 "tv join: unknown option $1" ;;
         esac
         shift
@@ -320,7 +323,8 @@ with --folder, or use it anyway with: tv join --adopt --folder $folder"
     mkdir -p "$folder" || die 1 "Couldn't make $folder."
     FOLDER=$(cd "$folder" && pwd) LOGIN=$login TAILNET=$tailnet TVHOME_ID=$tvhome_id
     NAME=$name EMAIL=$email
-    [ "$IMAGE" = "$DEFAULT_IMAGE" ] && pin_latest
+    if [ -n "$image" ] && [ -n "$rev" ]; then IMAGE=$REGISTRY@$image REVISION=$rev
+    elif [ "$IMAGE" = "$DEFAULT_IMAGE" ]; then pin_latest; fi
     # A box made before this join may know another tailnet: make it afresh
     # (its storage, and so any age key, is kept).
     if [ "$(box_state)" != absent ]; then
@@ -521,11 +525,17 @@ cmd_doctor() {
     else
         dadd port ok "Port $PORT is the box's."
     fi
-    new=
-    command -v curl >/dev/null 2>&1 && new=$(latest_revision)
-    if [ -z "$new" ]; then dadd newer-box warning "Couldn't check for a newer box (no answer from GitHub)."
-    elif [ "$new" = "$REVISION" ]; then dadd newer-box ok "The box is the newest version."
-    else dadd newer-box warning "There's a newer box." update; fi
+    # The Mac app says which box its release was built with; that's the one to have.
+    if [ -n "${TV_PINNED_REVISION:-}" ]; then
+        if [ "$TV_PINNED_REVISION" = "$REVISION" ]; then dadd newer-box ok "The box is the version this app expects."
+        else dadd newer-box warning "The box isn't the version this app was built with." update; fi
+    else
+        new=
+        command -v curl >/dev/null 2>&1 && new=$(latest_revision)
+        if [ -z "$new" ]; then dadd newer-box warning "Couldn't check for a newer box (no answer from GitHub)."
+        elif [ "$new" = "$REVISION" ]; then dadd newer-box ok "The box is the newest version."
+        else dadd newer-box warning "There's a newer box." update; fi
+    fi
 
     if [ "$json" = yes ]; then
         printf '{"results": [%s]}\n' "${results%,}"
@@ -736,8 +746,12 @@ cmd_update() {
     say "Updated. Your folder, key and secrets are as they were."
 }
 
-# Remake the box from IMAGE (its storage, and so the key, is kept).
+# Remake the box from IMAGE (its storage, and so the key, is kept). The new
+# image is fetched first: offline, the old box and the config stay as they were.
 replace_box() {
+    if [ "$RT" = container ]; then "$RT" image pull "$IMAGE" >/dev/null
+    else "$RT" pull "$IMAGE" >/dev/null; fi ||
+        die 1 "Couldn't fetch the new box (offline?); the old one is as it was."
     write_config
     if [ "$(box_state)" != absent ]; then
         "$RT" stop "$BOX" >/dev/null 2>&1

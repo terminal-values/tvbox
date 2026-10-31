@@ -52,12 +52,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // The unit tests run inside the app: never touch the real box then.
         if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil { return }
         moveIn()
+        model.pinned = BoxImage.read()
         let atLogin = Self.launchedAtLogin()
         if updatesOn { updater.startUpdater() }
         Task {
             await model.launch(atLogin: atLogin)
             // After an app update, the box follows to the image this release pins.
-            _ = await moveBoxIfNeeded(model: model, pinned: BoxImage.read())
+            _ = await moveBoxIfNeeded(model: model, pinned: model.pinned)
             model.startPolling()
         }
         // Opened by hand (not at login): show the window.

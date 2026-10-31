@@ -900,3 +900,40 @@ def test_status_json_says_which_box_this_is(box):
     box.configure(REVISION="c" * 40)
     out = json.loads(box.tv("status", "--json", FAKE_STATE="stopped").stdout)
     assert out["revision"] == "c" * 40
+
+
+# --- the release's pinned box (the final review) -----------------------------
+
+def test_join_can_be_given_its_image(box):
+    # The Mac app joins with the box its release was built with, not main's.
+    box.runtimes("container")
+    (box.bin / "curl").symlink_to(FAKECURL)
+    r = box.tv("join", "--login", "sam", "--image", "sha256:pinned", "--revision", "c" * 40, input=INVITE)
+    assert r.returncode == 0, r.stdout + r.stderr
+    text = box.config.read_text()
+    assert "IMAGE='ghcr.io/terminal-values/tvbox@sha256:pinned'" in text and f"REVISION='{'c' * 40}'" in text
+
+
+def test_a_box_move_pulls_first_and_leaves_the_old_box_if_it_cant(box):
+    # Offline after an app update: the old box must survive.
+    updatable(box)
+    before = box.config.read_text()
+    r = box.tv("update", "--to", "sha256:pinned", "--revision", "c" * 40, FAKE_STATE="running", FAKE_PULL_FAILS="1")
+    assert r.returncode != 0
+    assert box.config.read_text() == before
+    assert not [c for c in box.calls() if len(c) > 1 and c[1] in ("rm", "stop", "run")]
+
+
+def test_a_box_move_pulls_before_removing(box):
+    updatable(box)
+    box.tv("update", "--to", "sha256:pinned", "--revision", "c" * 40, FAKE_STATE="running")
+    verbs = [c[1] for c in box.calls() if len(c) > 1]
+    assert verbs.index("pull") < verbs.index("rm")
+
+
+def test_doctor_compares_with_the_apps_pin(box):
+    updatable(box)  # main is newer than this box, but the app pins this box
+    res = doctor_json(box, FAKE_STATE="running", FAKE_EXEC_OUT=BOX_DOCTOR, TV_PINNED_REVISION=OLD)
+    assert res["newer-box"]["status"] == "ok"
+    res = doctor_json(box, FAKE_STATE="running", FAKE_EXEC_OUT=BOX_DOCTOR, TV_PINNED_REVISION="d" * 40)
+    assert res["newer-box"]["status"] == "warning" and res["newer-box"]["fix"] == "update"
