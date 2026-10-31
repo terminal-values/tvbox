@@ -6,6 +6,12 @@ options:
   deploymentTarget:
     macOS: "26.0"
   createIntermediateGroups: true
+packages:
+  # Exactly 1.11.2: later versions need the Metal toolchain (1.12+) and run a
+  # build plugin, their own code at build time (1.19+).
+  SwiftTerm:
+    url: https://github.com/migueldeicaza/SwiftTerm
+    exactVersion: "1.11.2"
 settings:
   base:
     ARCHS: arm64
@@ -21,6 +27,8 @@ targets:
     platform: macOS
     sources:
       - path: TerminalValues
+    dependencies:
+      - package: SwiftTerm
     info:
       path: TerminalValues/Info.plist
       properties:

@@ -4,6 +4,7 @@ import SwiftUI
 /// gauges and the accent.
 struct MainWindow: View {
     @Bindable var model: AppModel
+    let terminal: TerminalSession
     var openDoctor: () -> Void = {}
     @State private var reviewing = false
 
@@ -28,7 +29,8 @@ struct MainWindow: View {
                     }
                 }
                 Section("Terminal") {
-                    TerminalSlot(model: model)
+                    TerminalSection(session: terminal, folder: model.status.map { URL(fileURLWithPath: $0.folder) })
+                        .frame(height: 170)
                 }
                 RecentSection(model: model)
             }
@@ -64,13 +66,5 @@ struct MainWindow: View {
     private func openFolder() {
         guard let folder = model.status?.folder else { return }
         NSWorkspace.shared.open(URL(fileURLWithPath: folder))
-    }
-}
-
-/// Where Task 10's terminal goes.
-struct TerminalSlot: View {
-    @Bindable var model: AppModel
-    var body: some View {
-        Text("terminal").foregroundStyle(.secondary).frame(height: 160)
     }
 }

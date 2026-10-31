@@ -13,7 +13,7 @@ struct TerminalValuesApp: App {
             MenuLabel(model: delegate.model)
         }
         Window("Terminal Values", id: "main") {
-            MainWindow(model: delegate.model)
+            MainWindow(model: delegate.model, terminal: delegate.terminal)
         }
         .windowResizability(.contentSize)
     }
@@ -23,8 +23,9 @@ struct TerminalValuesApp: App {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let model = AppModel(tv: .bundled)
-    /// Set by the window's terminal (Task 10): is a command running in it?
-    var terminalBusy: () -> Bool = { false }
+    /// The window's terminal, kept for the app's life so closing the window
+    /// doesn't end a command running in it.
+    let terminal = TerminalSession(tvDirectory: Bundle.main.resourceURL!)
     private var quitting = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -41,7 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         if quitting { return .terminateNow }
-        if model.quitRequested(terminalBusy: terminalBusy()) == .ask {
+        if model.quitRequested(terminalBusy: terminal.isBusy) == .ask {
             let alert = NSAlert()
             alert.messageText = "A command is still running in the terminal."
             alert.informativeText = "Quitting stops it, and stops the box."
