@@ -49,6 +49,8 @@ import Testing
         model.windowVisible(true)
         try await Task.sleep(for: .milliseconds(450))
         model.windowVisible(false)
+        // A call already under way may still finish; nothing new starts after.
+        try await Task.sleep(for: .milliseconds(250))
         let seen = fake.calls.filter { $0.hasPrefix("stats") }.count
         #expect(seen >= 2)
         try await Task.sleep(for: .milliseconds(400))
