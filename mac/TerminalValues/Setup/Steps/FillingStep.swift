@@ -10,5 +10,8 @@ struct FillingStep: View {
         }
         Text("The first time can take a few minutes.").foregroundStyle(.secondary)
             .task { await walk.fill() }
+        if walk.fillFailed {
+            HStack { Spacer(); Button("Try Again") { Task { await walk.fill() } } }
+        }
     }
 }

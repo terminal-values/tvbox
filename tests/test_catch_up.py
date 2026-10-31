@@ -258,3 +258,17 @@ def test_yes_refuses_if_secrets_moved_on(secrets_world):
     r = catch_up(bob, yes=True, args=["--to", shown["code"]["to"], "--secrets-to", shown["secrets"]["to"]])
     assert r.returncode == 4
     assert "age1mallory" not in (b / ".age-recipients").read_text()
+
+
+def test_changes_on_a_folder_with_no_history_yet_changes_nothing(tmp_path):
+    # The final review: tv changes, run by the app at launch, did the first
+    # clone and checkout into an adopted folder without the member asking.
+    folder = tmp_path / "folder"
+    folder.mkdir()
+    (folder / "README.md").write_text("the member's own\n")
+    env = dict(os.environ, TVBOX_INSIDE=str(folder), TVBOX_ENV="/dev/null", TV_LOGIN="sam",
+               TVHOME_HOST="tvhome.invalid", PASSAGE_DIR=str(tmp_path / "secrets"))
+    r = subprocess.run(["bash", str(TOOL), "--changes"], capture_output=True, text=True, env=env)
+    assert r.returncode == 3
+    assert "catch-up" in r.stdout + r.stderr
+    assert not (folder / ".git").exists() and (folder / "README.md").read_text() == "the member's own\n"

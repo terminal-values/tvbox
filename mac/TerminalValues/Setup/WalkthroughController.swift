@@ -15,6 +15,8 @@ final class WalkthroughController {
     var identity: Identity?
     var message: String?
     var working: String?
+    /// The first catch-up failed: the Filling step offers Try Again.
+    var fillFailed = false
     private let defaults: UserDefaults
 
     init(model: AppModel, defaults: UserDefaults = .standard) {
@@ -93,9 +95,15 @@ final class WalkthroughController {
         working = "Watching the clipboard…"
         defer { working = nil }
         while step == .invitation && !Task.isCancelled {
-            guard let r = try? await model.tv.run(
-                ["join", "--from-clipboard", "--login", login, "--name", name, "--email", email],
-                timeout: .seconds(600)) else { continue }
+            let r: TVResult
+            do {
+                r = try await model.tv.run(
+                    ["join", "--from-clipboard", "--login", login, "--name", name, "--email", email],
+                    timeout: .seconds(600))
+            } catch {
+                message = "\(error)"  // stop here, rather than try again at once
+                return
+            }
             if r.status == 0 {
                 await model.refresh()
                 await loadIdentity()
@@ -153,18 +161,31 @@ final class WalkthroughController {
         }
     }
 
-    // 8. Filling the folder: the first catch-up has nothing to review.
+    // 8. Filling the folder. The first catch-up has nothing to review: it
+    // takes what's on tvhome, as the first one always has.
     func fill() async {
-        working = "Fetching TV's code and documents…"
-        defer { working = nil }
-        if !firstCatchUpDone, let c = try? await model.tv.json(Changes.self, ["changes"], timeout: .seconds(300)) {
-            var args = ["catch-up", "--yes", "--to", c.code.to]
-            if let s = c.secrets.to { args += ["--secrets-to", s] }
-            if let r = try? await model.tv.run(args, timeout: .seconds(300)), r.status == 0 { set("firstCatchUpDone") }
+        fillFailed = false
+        if !firstCatchUpDone {
+            working = "Fetching TV's code and documents…"
+            defer { working = nil }
+            do {
+                let r = try await model.tv.run(["catch-up", "--yes"], timeout: .seconds(600))
+                guard r.status == 0 else {
+                    message = r.stderr.isEmpty ? r.stdout : r.stderr
+                    fillFailed = true
+                    return
+                }
+                set("firstCatchUpDone")
+                message = nil
+            } catch {
+                message = "\(error)"
+                fillFailed = true
+                return
+            }
         }
         while step == .filling && !Task.isCancelled {
             await model.refresh()
-            if let s = model.status?.sync, s.needFiles == 0, !s.waitingForList, firstCatchUpDone { go(.done); return }
+            if let s = model.status?.sync, s.needFiles == 0, !s.waitingForList { go(.done); return }
             try? await Task.sleep(for: .seconds(3))
         }
     }

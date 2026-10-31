@@ -153,3 +153,38 @@ import Testing
         #expect(!d.bool(forKey: "walkthroughFinished") && !d.bool(forKey: "keySkipped"))
     }
 }
+
+@MainActor @Suite struct WalkthroughFailureTests {
+    func defaults() -> UserDefaults { UserDefaults(suiteName: "tv-tests-\(UUID().uuidString)")! }
+
+    // The final review: a failed first catch-up left "Fetching…" up for ever.
+    @Test func aFailedFirstCatchUpIsShownNotHung() async throws {
+        let fake = try FakeTV(answers: ["check": "running\n", "status": Fixture.statusRunning,
+                                        "catch-up": "Permission denied (publickey).\n"],
+                              exits: ["catch-up": 1])
+        let walk = WalkthroughController(model: AppModel(tv: fake.tv), defaults: defaults())
+        walk.go(.filling)
+        await walk.fill()  // returns, rather than polling for ever
+        #expect(walk.fillFailed && walk.message?.contains("Permission denied") == true)
+        #expect(walk.step == .filling && !walk.firstCatchUpDone)
+    }
+
+    @Test func theFirstCatchUpTakesWhatsThereThenFinishes() async throws {
+        let fake = try FakeTV(answers: ["check": "running\n", "status": Fixture.statusRunning])
+        let walk = WalkthroughController(model: AppModel(tv: fake.tv), defaults: defaults())
+        walk.go(.filling)
+        await walk.fill()
+        #expect(fake.calls.contains("catch-up --yes"))
+        #expect(!fake.calls.contains("changes"))
+        #expect(walk.step == .done && walk.firstCatchUpDone)
+    }
+
+    // The final review: a tv that can't be run made the invitation step spin.
+    @Test func anInvitationWatchThatCantRunTvStops() async throws {
+        let model = AppModel(tv: TV(executable: URL(fileURLWithPath: "/nonexistent/tv")))
+        let walk = WalkthroughController(model: model, defaults: defaults())
+        walk.go(.invitation)
+        await walk.watchForInvitation()
+        #expect(walk.message != nil)
+    }
+}

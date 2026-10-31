@@ -37,6 +37,12 @@ while [ $# -gt 0 ]; do
 done
 cd "$INSIDE"
 
+# --changes only reports: before the first catch-up there's nothing to compare.
+if [ "$changes" = yes ] && [ ! -e .git ]; then
+    echo "This folder hasn't caught up with tvhome yet: tv catch-up does the first one." >&2
+    exit 3
+fi
+
 # The first time, the folder gets its git history (the documents are
 # already there by Syncthing), and the box its secrets store.
 if [ ! -e .git ]; then
