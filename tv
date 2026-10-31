@@ -397,6 +397,53 @@ status_json() {
     printf '}\n'
 }
 
+# tv stats [--json] [--no-disk]: the box's CPU, memory and disk use, for the
+# Mac app's gauges. Each runtime reports these its own way: Apple's
+# container gives CPU time used so far (so two readings, a moment apart),
+# Docker and Podman a percentage and memory as "390MiB / 1GiB". Disk walks
+# the folder, which is slow, hence --no-disk for frequent refreshes.
+cmd_stats() {
+    json=no nodisk=no
+    for a; do case $a in --json) json=yes ;; --no-disk) nodisk=yes ;; esac; done
+    need_box
+    case $RT in
+        container)
+            t=${TV_STATS_INTERVAL:-1}
+            before=$(stats_number "$("$RT" stats --no-stream --format json "$BOX")" cpuUsageUsec)
+            sleep "$t"
+            out=$("$RT" stats --no-stream --format json "$BOX")
+            after=$(stats_number "$out" cpuUsageUsec)
+            cpu=$(awk -v a="${before:-0}" -v b="${after:-0}" -v t="$t" 'BEGIN { printf "%.1f", (b - a) / (t * 10000) }')
+            mem=$(stats_number "$out" memoryUsageBytes) ;;
+        *)
+            out=$("$RT" stats --no-stream --format json "$BOX")
+            cpu=$(printf '%s' "$out" | sed -nE 's/.*"(CPUPerc|cpu_percent)": *"([0-9.]+)%".*/\2/p')
+            mem=$(to_bytes "$(printf '%s' "$out" | sed -nE 's/.*"(MemUsage|mem_usage)": *"([^ /]+) *\/.*/\2/p')") ;;
+    esac
+    disk=null
+    [ "$nodisk" = yes ] ||
+        disk=$(in_box du -sk /state "$INSIDE" 2>/dev/null | awk '{ s += $1 } END { print s * 1024 }')
+    if [ "$json" = yes ]; then
+        printf '{"cpu_percent": %s, "memory_bytes": %s, "disk_bytes": %s}\n' "${cpu:-0}" "${mem:-0}" "$disk"
+    else
+        line="CPU ${cpu:-0}% · memory $(( ${mem:-0} / 1048576 )) MB"
+        [ "$disk" = null ] || line="$line · disk $(( disk / 1048576 )) MB"
+        say "$line"
+    fi
+}
+
+# stats_number JSON FIELD: a number field from a runtime's stats.
+stats_number() { printf '%s' "$1" | sed -nE "s/.*\"$2\": *([0-9]+).*/\\1/p"; }
+
+# to_bytes "390MiB": Docker's and Podman's human sizes, in bytes.
+to_bytes() {
+    printf '%s' "$1" | awk '{
+        n = $0 + 0; u = $0; sub(/^[0-9.]+/, "", u)
+        m["B"] = 1; m["kB"] = 1e3; m["KB"] = 1e3; m["MB"] = 1e6; m["GB"] = 1e9
+        m["KiB"] = 1024; m["MiB"] = 1048576; m["GiB"] = 1073741824
+        printf "%.0f", n * (u in m ? m[u] : 1) }'
+}
+
 cmd_pages() {
     need_box
     url=http://127.0.0.1:$PORT/$(printf '%s' "${1:-}" | sed 's:^/*::; s/ /%20/g')
@@ -556,6 +603,7 @@ tv: Terminal Values' box.
   tv start         start the box; documents sync while it runs
   tv stop          stop it
   tv status        is it running, on the tailnet, syncing?
+  tv stats         the box's CPU, memory and disk use
   tv catch-up      bring the code and secrets up to date, showing code changes first
   tv push          send your code commits and the secrets to tvhome
   tv git ...       git, in the TV folder, in the box
@@ -579,6 +627,7 @@ case $cmd in
     start) cmd_start ;;
     stop) cmd_stop ;;
     status) cmd_status "$@" ;;
+    stats) cmd_stats "$@" ;;
     catch-up) need_box; in_box tvbox-catch-up ;;
     push) need_box; in_box tvbox-push ;;
     git|passage) need_box; in_box "$cmd" "$@" ;;
@@ -596,7 +645,7 @@ case $cmd in
     help|-h|--help) usage ;;
     *)  # A near miss gets a suggestion: tv catchup, tv catch_up, tv Status.
         near=$(printf '%s' "$cmd" | tr 'A-Z_' 'a-z-')
-        for c in join start stop status catch-up push git passage run shell pages \
+        for c in join start stop status stats catch-up push git passage run shell pages \
                  import-key export-key folder move update uninstall; do
             [ "$(printf '%s' "$c" | tr -d -)" = "$(printf '%s' "$near" | tr -d -)" ] && near=$c && break
             c=

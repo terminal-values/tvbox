@@ -7,6 +7,7 @@ first) to $FAKE_LOG. Behaviour:
   FAKE_STATE=...       the box is running, stopped or absent (default absent)
   FAKE_RUN_FAILS=1     making the box fails (as when its port is taken)
   FAKE_EXEC_OUT=...    what exec prints
+  stats                answers in each runtime's own --format json shape
 """
 import json
 import os
@@ -29,6 +30,21 @@ if down:
 if verb == "run" and os.environ.get("FAKE_RUN_FAILS") == "1":
     print("Error: bind: Address already in use", file=sys.stderr)
     sys.exit(1)
+if verb == "stats":
+    if name == "container":
+        # Cumulative CPU time: 30 ms more at each call, so 3% over a second.
+        n_file = os.environ["FAKE_LOG"] + ".statscount"
+        n = int(open(n_file).read()) if os.path.exists(n_file) else 0
+        open(n_file, "w").write(str(n + 1))
+        print(json.dumps([{"cpuUsageUsec": 178654071 + 30000 * n, "id": "tvbox",
+                           "memoryLimitBytes": 1073741824, "memoryUsageBytes": 408944640,
+                           "numProcesses": 34}]))
+    elif name == "docker":
+        print(json.dumps({"CPUPerc": "3.00%", "MemUsage": "390MiB / 1GiB", "Name": "tvbox"}))
+    else:
+        print(json.dumps([{"name": "tvbox", "cpu_percent": "3.00%",
+                           "mem_usage": "408.9MB / 1.074GB"}]))
+    sys.exit(0)
 if verb == "exec" and "FAKE_EXEC_OUT" in os.environ:
     print(os.environ["FAKE_EXEC_OUT"])
     sys.exit(0)

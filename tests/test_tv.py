@@ -704,3 +704,44 @@ def test_status_json_splices_the_box_half(box):
     out = json.loads(r.stdout)
     assert out["box"] == "running" and out["tailnet"] == "on" and out["sync"] == {"connected": True}
     assert box.call("exec")[-2:] == ["tvbox-status", "--json"]
+
+
+# --- stats --json, for the Mac app ------------------------------------------
+
+DU = "1000\t/state\n2000\t/home/tv/terminalvalues"
+
+
+@pytest.mark.parametrize("runtime,memory", [
+    ("container", 408944640), ("docker", 408944640), ("podman", 408900000)])
+def test_stats_json(box, runtime, memory):
+    box.runtimes(runtime)
+    box.configure()
+    r = box.tv("stats", "--json", FAKE_STATE="running", FAKE_EXEC_OUT=DU, TV_STATS_INTERVAL="1")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert json.loads(r.stdout) == {"cpu_percent": 3.0, "memory_bytes": memory,
+                                    "disk_bytes": 3000 * 1024}
+
+
+def test_stats_without_disk_skips_du(box):
+    box.runtimes("docker")
+    box.configure()
+    r = box.tv("stats", "--json", "--no-disk", FAKE_STATE="running")
+    assert json.loads(r.stdout)["disk_bytes"] is None
+    assert not [c for c in box.calls() if len(c) > 1 and c[1] == "exec"]
+
+
+def test_stats_needs_a_running_box(box):
+    box.runtimes("docker")
+    box.configure()
+    r = box.tv("stats", "--json", FAKE_STATE="stopped")
+    assert r.returncode == 3
+
+
+def test_stats_in_words_with_and_without_disk(box):
+    box.runtimes("docker")
+    box.configure()
+    r = box.tv("stats", "--no-disk", FAKE_STATE="running")
+    assert r.returncode == 0, r.stderr
+    assert r.stdout == "CPU 3.00% · memory 390 MB\n"
+    r = box.tv("stats", FAKE_STATE="running", FAKE_EXEC_OUT=DU)
+    assert r.stdout == "CPU 3.00% · memory 390 MB · disk 2 MB\n"
