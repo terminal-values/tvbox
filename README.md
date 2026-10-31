@@ -62,6 +62,7 @@ tv shell               a shell in the box
 tv export-key FILE     save a copy of your age key (readable only by you)
 tv import-key          bring one in (--replace to swap out a new one)
 tv update              a newer box, showing tvbox's commits since yours first
+                       (with the Mac app installed, the app updates itself and the box together)
 tv folder / move DIR    where the TV folder is; put it somewhere else
 ```
 

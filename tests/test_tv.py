@@ -19,7 +19,7 @@ FAKE = Path(__file__).resolve().parent / "fakeruntime"
 # dash, Debian's sh and the strictest about POSIX, when this machine has it.
 SH = shutil.which("dash") or "sh"
 TOOLS = ["sh", "env", "python3", "id", "mkdir", "cat", "sed", "grep", "ls",
-         "uname", "mv", "rm", "rmdir", "tr", "dirname", "head", "chmod", "basename", "awk", "df", "cut"]
+         "uname", "mv", "rm", "rmdir", "tr", "dirname", "head", "chmod", "basename", "awk", "df", "cut", "readlink"]
 
 
 @pytest.fixture
@@ -802,21 +802,44 @@ def test_update_to_moves_to_that_image_without_github(box):
     assert box.call("run")[-1] == "ghcr.io/terminal-values/tvbox@sha256:pinned"
 
 
-def test_update_leaves_a_symlinked_tv_alone(box, tmp_path):
-    # With the Mac app, ~/.local/bin/tv links into the app, which updates it.
-    updatable(box)
+def apps_tv(box, tmp_path):
+    """~/.local/bin/tv as the Mac app makes it: a link to the tv inside it."""
     app_tv = tmp_path / "Terminal Values.app/Contents/Resources/tv"
     app_tv.parent.mkdir(parents=True)
     shutil.copy(TV, app_tv)
     link = box.home / ".local/bin/tv"
     link.parent.mkdir(parents=True)
     link.symlink_to(app_tv)
-    e = {"PATH": str(box.bin), "HOME": str(box.home), "TV_CONFIG": str(box.config),
-         "FAKE_LOG": str(box.log), "FAKE_STATE": "running"}
-    r = subprocess.run([SH, str(link), "update", "--yes"], env=e, capture_output=True, text=True)
+    (box.bin / "open").write_text(f'#!/bin/sh\necho "$@" > {box.tmp}/opened\n')
+    (box.bin / "open").chmod(0o755)
+    env = {"PATH": str(box.bin), "HOME": str(box.home), "TV_CONFIG": str(box.config),
+           "FAKE_LOG": str(box.log), "FAKE_STATE": "running"}
+    return link, app_tv, env
+
+
+def test_update_with_the_apps_tv_hands_over_to_the_app(box, tmp_path):
+    # With the app installed, updates come with the app's own (Danny's call,
+    # 2026-10-31): a terminal update would move the box ahead of the app, and
+    # the app would move it back at its next start.
+    updatable(box)
+    link, app_tv, env = apps_tv(box, tmp_path)
+    r = subprocess.run([SH, str(link), "update", "--yes"], env=env, capture_output=True, text=True)
     assert r.returncode == 0, r.stdout + r.stderr
+    assert "Terminal Values" in r.stdout and "Check for Updates" in r.stdout
+    assert (box.tmp / "opened").read_text().strip() == "-a Terminal Values"
+    assert not [c for c in box.calls() if len(c) > 1 and c[1] in ("rm", "run", "stop", "pull")]
     assert link.is_symlink() and app_tv.read_text() == TV.read_text()
 
+
+def test_the_apps_own_update_options_still_work(box, tmp_path):
+    updatable(box)
+    link, app_tv, env = apps_tv(box, tmp_path)
+    r = subprocess.run([SH, str(link), "update", "--to", "sha256:pinned", "--revision", "c" * 40],
+                       env=env, capture_output=True, text=True)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert box.call("run")[-1] == "ghcr.io/terminal-values/tvbox@sha256:pinned"
+    r = subprocess.run([SH, str(link), "update", "--check", "--json"], env=env, capture_output=True, text=True)
+    assert json.loads(r.stdout)["latest"] == NEW
 
 # --- doctor -----------------------------------------------------------------
 

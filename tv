@@ -703,6 +703,15 @@ cmd_update() {
         say "Updated. Your folder, key and secrets are as they were."
         return
     fi
+    # With the Mac app, updates come with the app's own, which keeps the tv
+    # inside it and the box from the same commit; one here would move the box
+    # ahead of the app, and the app would move it back when it next starts.
+    if [ "$check" = no ] && apps_tv; then
+        say "On this Mac, Terminal Values.app updates the box along with itself, so"
+        say "the two always match. Use Check for Updates… at the foot of its window."
+        open -a "Terminal Values" 2>/dev/null || true
+        return
+    fi
     command -v curl >/dev/null 2>&1 || die 1 "tv update needs curl."
     new=$(latest_revision)
     [ -n "$new" ] || die 1 "Couldn't reach GitHub to check for a newer box."
@@ -744,6 +753,14 @@ cmd_update() {
         chmod 755 "$0.new" && mv -f "$0.new" "$0"
     fi
     say "Updated. Your folder, key and secrets are as they were."
+}
+
+# Is this the tv inside the Mac app (run through the link it makes in
+# ~/.local/bin, or directly)?
+apps_tv() {
+    me_path=$0
+    [ -L "$me_path" ] && me_path=$(readlink "$me_path")
+    case $me_path in *.app/Contents/Resources/tv) return 0 ;; *) return 1 ;; esac
 }
 
 # Remake the box from IMAGE (its storage, and so the key, is kept). The new
