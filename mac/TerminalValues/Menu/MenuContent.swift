@@ -23,6 +23,7 @@ struct MenuContent: View {
             if model.pendingCodeChanges > 0 {
                 Button("Catch Up… (\(model.pendingCodeChanges) code change\(model.pendingCodeChanges == 1 ? "" : "s"))") {
                     showWindow()
+                    model.reviewRequested = true
                 }
             }
             Divider()

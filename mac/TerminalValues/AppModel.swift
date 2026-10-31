@@ -32,6 +32,9 @@ final class AppModel {
     var wantsWindow = false
     /// The walkthrough has finished: time for the tutorial.
     var tutorialRequested = false
+    /// Asked for from elsewhere (the Doctor): the review sheet, an update.
+    var reviewRequested = false
+    var updateRequested = false
     var lastError: String?
 
     /// Joined: tv knows a login for this computer.

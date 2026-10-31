@@ -6,7 +6,6 @@ struct MainWindow: View {
     @Bindable var model: AppModel
     let terminal: TerminalSession
     @Bindable var walk: WalkthroughController
-    var openDoctor: () -> Void = {}
     @State private var reviewing = false
     @Environment(\.openWindow) private var openWindow
 
@@ -50,13 +49,16 @@ struct MainWindow: View {
                 RecentSection(model: model)
             }
             .formStyle(.grouped)
-            FooterView(model: model, openDoctor: openDoctor)
+            FooterView(model: model, openDoctor: { openWindow(id: "doctor") })
         }
         .frame(width: 400)
         .frame(minHeight: 720)
         .onAppear { model.windowVisible(true) }
         .onDisappear { model.windowVisible(false) }
         .sheet(isPresented: $reviewing) { ChangesSheet(model: model) }
+        .onChange(of: model.reviewRequested) {
+            if model.reviewRequested { model.reviewRequested = false; reviewing = true }
+        }
         .alert("Something went wrong", isPresented: .constant(model.lastError != nil)) {
             Button("OK") { model.lastError = nil }
         } message: { Text(model.lastError ?? "") }

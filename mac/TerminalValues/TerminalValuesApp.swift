@@ -15,6 +15,10 @@ struct TerminalValuesApp: App {
         Window("Terminal Values", id: "main") {
             MainWindow(model: delegate.model, terminal: delegate.terminal, walk: delegate.walkthrough)
         }
+        Window("The Doctor", id: "doctor") {
+            DoctorView(doctor: delegate.doctor)
+        }
+        .windowResizability(.contentSize)
         Window("Tutorial", id: "tutorial") {
             TutorialView(tour: delegate.tutorial, model: delegate.model, terminal: delegate.terminal)
         }
@@ -32,6 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let terminal = TerminalSession(tvDirectory: Bundle.main.resourceURL!)
     lazy var walkthrough = WalkthroughController(model: model)
     let tutorial = TutorialProgress()
+    lazy var doctor = Doctor(model: model)
     private var quitting = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
