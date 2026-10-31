@@ -23,21 +23,26 @@ does the syncing, the git and the secrets.
 
 ## Install
 
-You need a container runtime first: Apple's
-[`container`](https://github.com/apple/container/releases) on a Mac
-(macOS 26 or later, Apple silicon), or `sudo apt install podman` on
-Debian or Ubuntu. Docker works too. Then:
+**On a Mac** (macOS 26 or later, Apple silicon only): download Terminal
+Values.app from the [latest release](https://github.com/terminal-values/tvbox/releases/latest),
+drag it to Applications and open it. It walks you through the rest without
+Terminal: Apple's [`container`](https://github.com/apple/container) (the
+one thing installed for the whole Mac, with your password), your login, the
+invitation you were sent (one line, `tvjoin:TAILNET:SYNCTHING-ID:KEY`,
+picked up from the clipboard so the key is never pasted or shown), saving
+your key, and the folder filling. After that it lives in the menu bar, and
+puts its own `tv` in `~/.local/bin` for terminals and agents.
+
+**On Linux** (or a Mac, from a terminal): `sudo apt install podman` on
+Debian or Ubuntu (Docker works too), then
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/terminal-values/tvbox/main/install.sh | sh
 ```
 
 That puts `tv` in `~/.local/bin` (adding it to your PATH only if it isn't
-there, and saying so) and, on a Mac, builds `~/Applications/Terminal
-Values.app`. No sudo. Then it runs `tv join`, which asks for your login
-name and email and waits for you to copy the invitation you were sent: one
-line, `tvjoin:TAILNET:SYNCTHING-ID:KEY`. On a Mac it picks that up from the
-clipboard, so the key is never pasted or shown.
+there, and saying so), no sudo, and runs `tv join`, which asks for your
+login name and email and then for the invitation.
 
 `tv uninstall` takes all of it away again, asking before it deletes the
 box's storage (which holds your age key).
@@ -46,7 +51,9 @@ box's storage (which holds your age key).
 
 ```
 tv start / stop        the box; documents sync only while it runs
-tv status              on the tailnet? syncing?
+tv status [--json]     on the tailnet? syncing?
+tv stats / identity / changes / doctor   CPU and memory; the lines Danny needs;
+                       what catch-up would bring; a check-up (--json for the app)
 tv catch-up            code and secrets up to date, code changes shown first
 tv push                commits and the secrets store to tvhome
 tv git ... / tv passage ... / tv run CMD ...   in the box, in the folder
@@ -72,8 +79,11 @@ tv folder / move DIR    where the TV folder is; put it somewhere else
 - The image is pinned by digest. `tv update` lists the commits between the
   image you have and the newest one, and asks before switching, since the
   box holds your key.
-- The Mac app is AppleScript compiled on your own Mac with `osacompile`,
-  so it's never downloaded and needs no notarisation.
+- The Mac app (`mac/`, SwiftUI) is a face on `tv`: it bundles it and runs
+  it for everything, so there's one implementation of joining, catching up
+  and updating. It's signed with a Developer ID and notarized, and updates
+  itself with Sparkle; each release pins the box image built from the same
+  commit, and moves the box to it after updating.
 
 None of this names TV's tailnet or tvhome's address: each member's
 invitation does.
@@ -84,15 +94,20 @@ This is built for one small organisation's setup, a tvhome machine on its
 own tailnet, and probably isn't much use as it stands to anyone else.
 Windows isn't supported. On a Mac, Apple's `container` passes on no
 file-change notices, so edits wait for a rescan (every 15 seconds).
-Documents don't sync while the box is stopped, and nothing starts it at
-login.
+Documents don't sync while the box is stopped; the Mac app starts it when
+it opens and stops it when it quits, and opens at login only if you ask.
 
 ## Development
 
 ```sh
 make test        # tv and the installer, against a fake runtime (pytest via uv)
 make box-test    # builds the image and checks what starts inside it
+make app-test    # the Mac app's tests (Xcode, and brew install xcodegen)
+make app         # builds it, unsigned, into mac/build
 ```
+
+Releases: a version tag runs `.github/workflows/app.yml`, which runs
+`mac/scripts/release.sh` (it lists the signing secrets it needs).
 
 Both runtimes are worth testing: `TV_RUNTIME=docker make box-test`.
 
