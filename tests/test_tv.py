@@ -19,7 +19,7 @@ FAKE = Path(__file__).resolve().parent / "fakeruntime"
 # dash, Debian's sh and the strictest about POSIX, when this machine has it.
 SH = shutil.which("dash") or "sh"
 TOOLS = ["sh", "env", "python3", "id", "mkdir", "cat", "sed", "grep", "ls",
-         "uname", "mv", "rm", "rmdir", "tr", "dirname", "head", "chmod", "basename", "awk"]
+         "uname", "mv", "rm", "rmdir", "tr", "dirname", "head", "chmod", "basename", "awk", "df", "cut"]
 
 
 @pytest.fixture
@@ -816,3 +816,69 @@ def test_update_leaves_a_symlinked_tv_alone(box, tmp_path):
     r = subprocess.run([SH, str(link), "update", "--yes"], env=e, capture_output=True, text=True)
     assert r.returncode == 0, r.stdout + r.stderr
     assert link.is_symlink() and app_tv.read_text() == TV.read_text()
+
+
+# --- doctor -----------------------------------------------------------------
+
+BOX_DOCTOR = json.dumps({"results": [
+    {"id": i, "status": "ok", "message": f"{i} is fine", "fix": None}
+    for i in ["tailnet", "route", "tvhome-ssh", "tvhome-pages", "tvhome-sync", "sync-errors",
+              "folder", "stignore", "age-key", "recipient", "disk-box"]]})
+ALL_IDS = ["runtime", "box", "image", "tailnet", "route", "tvhome-ssh", "tvhome-pages",
+           "tvhome-sync", "sync-errors", "folder", "stignore", "age-key", "recipient",
+           "disk-box", "disk-mac", "port", "newer-box"]
+
+
+def doctor_json(box, **env):
+    r = box.tv("doctor", "--json", **env)
+    assert r.returncode == 0, r.stdout + r.stderr
+    return {x["id"]: x for x in json.loads(r.stdout)["results"]}
+
+
+def test_doctor_all_ok(box):
+    updatable(box, revision=NEW)
+    box.configure(IMAGE="ghcr.io/terminal-values/tvbox@sha256:abc", REVISION=NEW)
+    res = doctor_json(box, FAKE_STATE="running", FAKE_EXEC_OUT=BOX_DOCTOR)
+    assert list(res) == ALL_IDS
+    assert [i for i, x in res.items() if x["status"] != "ok"] == []
+
+
+def test_doctor_runtime_down_suggests_start_runtime(box):
+    updatable(box, revision=NEW)
+    res = doctor_json(box, FAKE_DOWN="1")
+    assert res["runtime"]["status"] == "problem" and res["runtime"]["fix"] == "start-runtime"
+    assert res["tailnet"]["status"] == "warning" and "isn't running" in res["tailnet"]["message"]
+
+
+def test_doctor_box_stopped_skips_box_checks(box):
+    updatable(box, revision=NEW)
+    res = doctor_json(box, FAKE_STATE="stopped")
+    assert res["box"]["fix"] == "start-box"
+    assert not [c for c in box.calls() if len(c) > 1 and c[1] == "exec"]
+    assert list(res) == ALL_IDS
+
+
+def test_doctor_newer_box_suggests_update(box):
+    updatable(box)
+    res = doctor_json(box, FAKE_STATE="running", FAKE_EXEC_OUT=BOX_DOCTOR)
+    assert res["newer-box"]["status"] == "warning" and res["newer-box"]["fix"] == "update"
+
+
+def test_doctor_in_words(box):
+    updatable(box, revision=NEW)
+    r = box.tv("doctor", FAKE_DOWN="1")
+    assert "problem" in r.stdout and "tv runtime-start" in r.stdout
+
+
+def test_doctor_in_words_has_every_check(box):
+    updatable(box, revision=NEW)
+    r = box.tv("doctor", FAKE_STATE="running", FAKE_EXEC_OUT=BOX_DOCTOR)
+    assert [line.split()[1] for line in r.stdout.splitlines()] == ALL_IDS
+
+
+def test_doctor_on_an_older_box_says_why_it_didnt_check(box):
+    # A running box from before tvbox-doctor: not "the box isn't running".
+    updatable(box, revision=NEW)
+    res = doctor_json(box, FAKE_STATE="running")  # the fake exec prints nothing
+    assert "isn't running" not in res["tailnet"]["message"]
+    assert "tv update" in res["tailnet"]["message"]

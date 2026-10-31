@@ -460,6 +460,87 @@ cmd_identity() {
     fi
 }
 
+# tv doctor [--json]: a check-up of the whole chain, from the runtime on
+# this computer to tvhome and the member's key. Each check says ok, warning
+# or problem; none stops the others. The box's own checks are
+# tvbox-doctor's. The Mac app shows the JSON, with buttons for the fixes.
+cmd_doctor() {
+    json=no; [ "${1:-}" = --json ] && json=yes
+    results= text=
+    dadd() {  # dadd ID STATUS MESSAGE [FIX]
+        if [ -n "${4:-}" ]; then fix=$(json_str "$4"); else fix=null; fi
+        results="$results{\"id\": $(json_str "$1"), \"status\": $(json_str "$2"), \"message\": $(json_str "$3"), \"fix\": $fix},"
+    }
+    detect_runtime
+    up=no state=absent
+    if [ -z "$RT" ]; then
+        dadd runtime problem "There's no container runtime: on a Mac, install Apple's container; on Linux, Podman."
+    else
+        find_runtime
+        if runtime_answers; then up=yes; dadd runtime ok "$RT is running."
+        else dadd runtime problem "$RT isn't running." start-runtime; fi
+    fi
+    if [ "$up" = yes ]; then
+        state=$(box_state)
+        case $state in
+            running) dadd box ok "The box is running." ;;
+            stopped) dadd box warning "The box is stopped, so documents aren't syncing." start-box ;;
+            *) dadd box problem "There's no box yet." start-box ;;
+        esac
+    else
+        dadd box warning "Not checked: the runtime isn't running."
+    fi
+    case $IMAGE in
+        "$REGISTRY@sha256:"*) dadd image ok "The box is pinned to version $(printf '%s' "$REVISION" | cut -c1-7)." ;;
+        *) dadd image warning "The box isn't pinned to a version." update ;;
+    esac
+    inside=
+    if [ "$state" = running ]; then
+        inside=$(in_box tvbox-doctor --json 2>/dev/null | tr -d '\n' |
+            sed -n 's/^[[:space:]]*{"results": *\[\(.*\)\][[:space:]]*}[[:space:]]*$/\1/p')
+        why="Not checked: this box is from before the check-up (tv update)."
+    else
+        why="Not checked: the box isn't running."
+    fi
+    if [ -n "$inside" ]; then
+        results="$results$inside,"
+    else
+        for id in tailnet route tvhome-ssh tvhome-pages tvhome-sync sync-errors folder stignore \
+                  age-key recipient disk-box; do
+            dadd "$id" warning "$why"
+        done
+    fi
+    free=$( { df -Pk "${FOLDER:-$HOME}" 2>/dev/null || df -Pk "$HOME"; } | awk 'NR == 2 { print $4 }')
+    if [ "${free:-0}" -lt 512000 ]; then dadd disk-mac problem "This computer is almost out of space."
+    elif [ "${free:-0}" -lt 2097152 ]; then dadd disk-mac warning "This computer is getting low on space."
+    else dadd disk-mac ok "This computer has room."; fi
+    if [ "$state" != running ] && port_busy "$PORT"; then
+        dadd port warning "Something else is using port $PORT; the box will take another when it starts."
+    else
+        dadd port ok "Port $PORT is the box's."
+    fi
+    new=
+    command -v curl >/dev/null 2>&1 && new=$(latest_revision)
+    if [ -z "$new" ]; then dadd newer-box warning "Couldn't check for a newer box (no answer from GitHub)."
+    elif [ "$new" = "$REVISION" ]; then dadd newer-box ok "The box is the newest version."
+    else dadd newer-box warning "There's a newer box." update; fi
+
+    if [ "$json" = yes ]; then
+        printf '{"results": [%s]}\n' "${results%,}"
+        return
+    fi
+    # In words: one line per check, and the command for any fix.
+    printf '[%s]\n' "${results%,}" | sed 's/},[[:space:]]*{/}\n{/g; s/^\[//; s/\]$//' |
+        sed -nE 's/.*"id": "([^"]*)", "status": "([^"]*)", "message": "(.*)", "fix": (null|"([^"]*)")}.*/\2|\1|\3|\5/p' |
+        while IFS='|' read -r st id msg fx; do
+            case $fx in
+                start-runtime) fx="tv runtime-start" ;; start-box) fx="tv start" ;;
+                catch-up) fx="tv catch-up" ;; update) fx="tv update" ;;
+            esac
+            printf '%-8s %-13s %s%s\n' "$st" "$id" "$msg" "${fx:+  (fix: $fx)}"
+        done
+}
+
 cmd_pages() {
     need_box
     url=http://127.0.0.1:$PORT/$(printf '%s' "${1:-}" | sed 's:^/*::; s/ /%20/g')
@@ -679,6 +760,7 @@ tv: Terminal Values' box.
   tv export-key F  save a copy of your age key to file F
   tv update        get a newer box, showing what changed first
   tv identity      the three lines Danny needs to let this box in
+  tv doctor        a check-up of everything, with fixes
   tv folder        print where the TV folder is
   tv move FOLDER   move the TV folder somewhere else
   tv uninstall     remove the box and tv
@@ -694,6 +776,7 @@ case $cmd in
     status) cmd_status "$@" ;;
     stats) cmd_stats "$@" ;;
     identity) cmd_identity "$@" ;;
+    doctor) cmd_doctor "$@" ;;
     catch-up) need_box; in_box tvbox-catch-up "$@" ;;
     changes) need_box; in_box tvbox-catch-up --changes "$@" ;;
     push) need_box; in_box tvbox-push ;;
@@ -712,7 +795,7 @@ case $cmd in
     help|-h|--help) usage ;;
     *)  # A near miss gets a suggestion: tv catchup, tv catch_up, tv Status.
         near=$(printf '%s' "$cmd" | tr 'A-Z_' 'a-z-')
-        for c in join start stop status stats identity catch-up changes push git passage run shell pages \
+        for c in join start stop status stats identity doctor catch-up changes push git passage run shell pages \
                  import-key export-key folder move update uninstall; do
             [ "$(printf '%s' "$c" | tr -d -)" = "$(printf '%s' "$near" | tr -d -)" ] && near=$c && break
             c=

@@ -167,6 +167,15 @@ if printf '%s' "$me" | jq -e '(.syncthing | test("^([A-Z2-7]{7}-){7}[A-Z2-7]{7}$
 else
     fail "tvbox-identity said: $me"
 fi
+# The check-up's box half runs, answers every check, and with no tailnet here
+# says so rather than hanging.
+doc=$(inbox tvbox-doctor --json 2>/dev/null)
+if [ "$(printf '%s' "$doc" | jq -r '[.results[].id] | join(" ")' 2>/dev/null)" = \
+     "tailnet route tvhome-ssh tvhome-pages tvhome-sync sync-errors folder stignore age-key recipient disk-box" ]; then
+    ok "tvbox-doctor gives all eleven of the box's checks"
+else
+    fail "tvbox-doctor said: $doc"
+fi
 # Stopping the box stops its daemons properly, so tvhome sees Syncthing
 # hang up instead of waiting on a dead connection.
 $RT stop "$NAME" >/dev/null 2>&1

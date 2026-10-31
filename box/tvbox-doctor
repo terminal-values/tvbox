@@ -1,0 +1,98 @@
+#!/bin/sh
+# tvbox-doctor --json: the box's half of tv doctor. Checks the way from this
+# box to tvhome and back, and the member's key, as JSON: one result per
+# check, each ok, warning or problem, with a sentence and, where tv can fix
+# it, a fix id. Never prints a key.
+set -u
+. "${TVBOX_ENV:-/state/tvhome.env}"
+ST=${TVBOX_ST:-/state/syncthing}
+INSIDE=${TVBOX_INSIDE:-/home/tv/terminalvalues}
+SECRETS=${PASSAGE_DIR:-/state/secrets}
+STIGNORE=${TVBOX_STIGNORE:-/etc/tvbox/stignore}
+STATE=${TVBOX_STATE:-/state}
+
+results=
+add() {  # add ID STATUS MESSAGE [FIX]
+    results="$results$(jq -cn --arg id "$1" --arg s "$2" --arg m "$3" --arg f "${4:-}" \
+        '{id: $id, status: $s, message: $m, fix: (if $f == "" then null else $f end)}'),"
+}
+# within SECONDS CMD...: give up on CMD after a while, where timeout exists.
+within() { if command -v timeout >/dev/null 2>&1; then timeout "$@"; else shift; "$@"; fi; }
+
+status=$(tvbox-status --json 2>/dev/null)
+tailnet=$(printf '%s' "$status" | jq -r '.tailnet // "connecting"' 2>/dev/null)
+case $tailnet in
+    on) add tailnet ok "On TV's tailnet." ;;
+    offline) add tailnet problem "Not reaching TV's tailnet: this computer may be offline, or this box may have been removed from it." ;;
+    not-joined) add tailnet problem "Not on TV's tailnet: join again (tv join) with a new invitation from Danny." ;;
+    *) add tailnet warning "Still connecting to TV's tailnet. If this lasts more than a few minutes, check this computer's internet connection." ;;
+esac
+
+if [ "$tailnet" = on ]; then
+    peer=$(tailscale status --json 2>/dev/null |
+        jq -c --arg h "${TVHOME_HOST%%.*}" '[.Peer[]? | select(.HostName == $h)][0] // {}')
+    if [ -n "$(printf '%s' "$peer" | jq -r '.CurAddr // empty')" ]; then
+        add route ok "A direct connection to tvhome."
+    else
+        add route warning "Reaching tvhome through Tailscale's relay ($(printf '%s' "$peer" | jq -r '.Relay // "?"')): it works, just more slowly. Usually a firewall or a busy network; nothing to fix here."
+    fi
+    if within 20 ssh -o BatchMode=yes -o ConnectTimeout=15 tvhome true </dev/null >/dev/null 2>&1; then
+        add tvhome-ssh ok "Can log in to tvhome, so git can reach it."
+    else
+        add tvhome-ssh problem "Can't log in to tvhome, so tv push and tv catch-up won't work. Ask Danny whether your login there is set up."
+    fi
+    code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 http://127.0.0.1:8484/ 2>/dev/null)
+    if [ "$code" = 200 ]; then add tvhome-pages ok "TV's pages answer through the box."
+    else add tvhome-pages problem "TV's pages don't answer through the box (got ${code:-nothing})."; fi
+else
+    for id in route tvhome-ssh tvhome-pages; do
+        add "$id" warning "Not checked: not on TV's tailnet."
+    done
+fi
+
+connected=$(printf '%s' "$status" | jq -r '.sync.connected // false' 2>/dev/null)
+shared=$(printf '%s' "$status" | jq -r '.sync.shared // false' 2>/dev/null)
+if [ "$connected" != true ]; then
+    add tvhome-sync problem "Syncthing isn't connected to tvhome's, so documents aren't syncing."
+elif [ "$shared" != true ]; then
+    add tvhome-sync problem "tvhome hasn't shared TV's folder with this box yet: ask Danny."
+else
+    add tvhome-sync ok "Syncing with tvhome."
+fi
+
+key=$(sed -n 's:.*<apikey>\(.*\)</apikey>.*:\1:p' "$ST/config.xml" 2>/dev/null)
+errors=$(curl -fsS --noproxy '*' -H "X-API-Key: $key" \
+    "http://127.0.0.1:8384/rest/folder/errors?folder=terminalvalues" 2>/dev/null)
+n=$(printf '%s' "$errors" | jq -r '(.errors // []) | length' 2>/dev/null)
+if [ "${n:-0}" -gt 0 ]; then
+    first=$(printf '%s' "$errors" | jq -r '.errors[0] | "\(.path): \(.error)"')
+    add sync-errors warning "Syncthing couldn't sync $n file(s). The first: $first"
+else
+    add sync-errors ok "No files stuck."
+fi
+
+if [ -d "$INSIDE" ] && [ -w "$INSIDE" ]; then add folder ok "The TV folder is there, and writable."
+else add folder problem "The box can't write to the TV folder. Restart the box (tv stop, then tv start)." start-box; fi
+
+if cmp -s "$INSIDE/.stignore" "$STIGNORE"; then add stignore ok "The folder's sync rules are TV's."
+else add stignore warning "The folder's .stignore has been changed; the box puts TV's back when it starts (tv stop, then tv start)." start-box; fi
+
+ids=$HOME/.passage/identities
+pub=$(age-keygen -y "$ids" 2>/dev/null)
+if [ -n "$pub" ]; then add age-key ok "Your age key is in the box."
+else add age-key problem "There's no age key in the box: bring in your saved one with tv import-key."; fi
+
+if [ ! -f "$SECRETS/.age-recipients" ]; then
+    add recipient warning "Not checked: TV's secrets aren't here yet." catch-up
+elif [ -n "$pub" ] && grep -qxF "$pub" "$SECRETS/.age-recipients"; then
+    add recipient ok "TV's secrets are encrypted to your key."
+else
+    add recipient problem "Your key isn't one of those TV's secrets are encrypted to: send Danny your age line (tv identity)."
+fi
+
+free=$(df -Pk "$STATE" 2>/dev/null | awk 'NR == 2 { print $4 }')
+if [ "${free:-0}" -lt 102400 ]; then add disk-box problem "The box's storage is almost full."
+elif [ "${free:-0}" -lt 512000 ]; then add disk-box warning "The box's storage is getting full."
+else add disk-box ok "The box has room."; fi
+
+printf '{"results": [%s]}\n' "${results%,}"
