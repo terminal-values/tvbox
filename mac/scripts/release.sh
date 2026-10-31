@@ -84,6 +84,7 @@ cp -R "$app" "$stage/"
 ln -s /Applications "$stage/Applications"
 dmg="$OUT/feed/Terminal-Values-$VERSION.dmg"
 hdiutil create -volname "Terminal Values" -srcfolder "$stage" -format UDZO -ov "$dmg" -quiet
+codesign --sign "Developer ID Application" --timestamp "$dmg"
 notarize "$dmg"
 xcrun stapler staple "$dmg"
 

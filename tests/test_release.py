@@ -29,3 +29,11 @@ def test_says_every_missing_credential_before_doing_anything():
                  "SPARKLE_PRIVATE_KEY_FILE", "SPARKLE_BIN"]:
         assert name in r.stderr, name
     assert not (ROOT / "mac" / "TerminalValues" / "BoxImage.plist").exists()
+
+
+def test_the_dmg_is_signed_before_it_is_notarized():
+    # Found in the first release: the .dmg carried a stapled notarization but
+    # no signature of its own, which Gatekeeper's strict check rejects.
+    text = SCRIPT.read_text()
+    sign = text.index('codesign --sign "Developer ID Application" --timestamp "$dmg"')
+    assert sign < text.index('notarize "$dmg"')
