@@ -1,13 +1,16 @@
 #!/bin/sh
 # Stands in for tv in the app's tests. Logs each call's arguments to
-# $FAKETV_DIR/calls.log, then answers SUBCOMMAND from $FAKETV_DIR/SUBCOMMAND.out
-# (and exits with $FAKETV_DIR/SUBCOMMAND.exit, default 0). FAKETV_SLEEP=n
-# sleeps first; FAKETV_JUNK=1 prints something that isn't JSON.
+# $FAKETV_DIR/calls.log, then answers SUBCOMMAND from $FAKETV_DIR/SUBCOMMAND.N.out
+# for its Nth call if there is one, else SUBCOMMAND.out (and exits with
+# SUBCOMMAND.exit, default 0). FAKETV_SLEEP=n sleeps first; FAKETV_JUNK=1
+# prints something that isn't JSON.
 d=${FAKETV_DIR:?FAKETV_DIR is not set}
 echo "$*" >> "$d/calls.log"
 [ -n "${FAKETV_SLEEP:-}" ] && sleep "$FAKETV_SLEEP"
 if [ -n "${FAKETV_JUNK:-}" ]; then echo "Error: something that is not JSON"; exit 0; fi
 cmd=${1:-help}
-[ -f "$d/$cmd.out" ] && cat "$d/$cmd.out"
+n=$(grep -c "^$cmd\( \|$\)" "$d/calls.log")
+if [ -f "$d/$cmd.$n.out" ]; then cat "$d/$cmd.$n.out"
+elif [ -f "$d/$cmd.out" ]; then cat "$d/$cmd.out"; fi
 [ -f "$d/$cmd.exit" ] && exit "$(cat "$d/$cmd.exit")"
 exit 0
