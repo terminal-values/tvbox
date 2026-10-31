@@ -745,3 +745,13 @@ def test_stats_in_words_with_and_without_disk(box):
     assert r.stdout == "CPU 3.00% · memory 390 MB\n"
     r = box.tv("stats", FAKE_STATE="running", FAKE_EXEC_OUT=DU)
     assert r.stdout == "CPU 3.00% · memory 390 MB · disk 2 MB\n"
+
+
+def test_changes_and_a_pinned_catch_up_run_in_the_box(box):
+    box.runtimes("docker")
+    box.configure()
+    box.tv("changes", "--diff", FAKE_STATE="running")
+    assert box.call("exec")[-3:] == ["tvbox-catch-up", "--changes", "--diff"]
+    box.log.write_text("")
+    box.tv("catch-up", "--yes", "--to", "abc", "--secrets-to", "def", FAKE_STATE="running")
+    assert box.call("exec")[-6:] == ["tvbox-catch-up", "--yes", "--to", "abc", "--secrets-to", "def"]

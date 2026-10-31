@@ -605,6 +605,7 @@ tv: Terminal Values' box.
   tv status        is it running, on the tailnet, syncing?
   tv stats         the box's CPU, memory and disk use
   tv catch-up      bring the code and secrets up to date, showing code changes first
+  tv changes       what tv catch-up would bring in, as JSON
   tv push          send your code commits and the secrets to tvhome
   tv git ...       git, in the TV folder, in the box
   tv passage ...   TV's shared secrets
@@ -628,7 +629,8 @@ case $cmd in
     stop) cmd_stop ;;
     status) cmd_status "$@" ;;
     stats) cmd_stats "$@" ;;
-    catch-up) need_box; in_box tvbox-catch-up ;;
+    catch-up) need_box; in_box tvbox-catch-up "$@" ;;
+    changes) need_box; in_box tvbox-catch-up --changes "$@" ;;
     push) need_box; in_box tvbox-push ;;
     git|passage) need_box; in_box "$cmd" "$@" ;;
     run) need_box; in_box "$@" ;;
@@ -645,7 +647,7 @@ case $cmd in
     help|-h|--help) usage ;;
     *)  # A near miss gets a suggestion: tv catchup, tv catch_up, tv Status.
         near=$(printf '%s' "$cmd" | tr 'A-Z_' 'a-z-')
-        for c in join start stop status stats catch-up push git passage run shell pages \
+        for c in join start stop status stats catch-up changes push git passage run shell pages \
                  import-key export-key folder move update uninstall; do
             [ "$(printf '%s' "$c" | tr -d -)" = "$(printf '%s' "$near" | tr -d -)" ] && near=$c && break
             c=

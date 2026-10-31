@@ -107,7 +107,9 @@ fi
 # Every script in the box parses (dash is pickier than bash: an apostrophe
 # in ${VAR:?message} broke tvbox-catch-up).
 for f in $(inbox sh -c 'ls /usr/local/bin/tvbox-*'); do
-    if inbox sh -n "$f" 2>/dev/null; then ok "$f parses"; else fail "$f doesn't parse: $(inbox sh -n "$f" 2>&1)"; fi
+    # With the shell its first line names (tvbox-catch-up is bash).
+    sh_=$(inbox head -1 "$f" | sed 's/^#! *//; s/ .*//')
+    if inbox "$sh_" -n "$f" 2>/dev/null; then ok "$f parses"; else fail "$f doesn't parse: $(inbox "$sh_" -n "$f" 2>&1)"; fi
 done
 # ssh reads its config from the passwd entry's home, not $HOME, so the
 # member's entry must say /state/home: for a uid from their computer (a

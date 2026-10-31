@@ -1,15 +1,47 @@
-#!/bin/sh
-# tv catch-up. The first time, gives the TV folder its git history (the
-# documents are already there by Syncthing) and fetches the secrets store;
-# then hands over to the folder's own bin/tv-catch-up, which shows code
-# changes before applying them.
-set -eu
-. /state/tvhome.env
-INSIDE=/home/tv/terminalvalues
-# No apostrophes in this message: dash reads them as quotes, even here.
-login=${TV_LOGIN:?the box has no login yet, so run tv join}
+#!/bin/bash
+# tv catch-up: bring the TV folder's code and the secrets store up to date
+# with tvhome. (Until 2026-10-30 most of this was the folder's own
+# bin/tv-catch-up; it lives in the box now, so it's versioned and tested with
+# tv, and the Mac app can rely on it.)
+#
+# Syncthing carries TV's documents (doc/ www/ ledger/ entity/ site/), which
+# git doesn't track. Everything git does track (bin/, src/, the Makefile,
+# CLAUDE.md, WELCOME2TV.md...) is code or instructions that run on your
+# machine, so you see what's changed before it's applied. Your own commits
+# go on top of what came in, for tv push to send. In the secrets store, a
+# change to who can read it (any .age-recipients) is shown and asked about.
+#
+#   tvbox-catch-up [--yes] [--to CODE] [--secrets-to SECRETS]
+#       Refuses if you have uncommitted edits to code or instructions.
+#       --yes answers yes to everything; with --to and --secrets-to (what
+#       --changes reported), it applies only if tvhome still has exactly
+#       that, so nothing arrives unseen.
+#   tvbox-catch-up --changes [--diff]
+#       What catch-up would do, as JSON, changing nothing (for the Mac app).
+set -euo pipefail
+. "${TVBOX_ENV:-/state/tvhome.env}"
+INSIDE=${TVBOX_INSIDE:-/home/tv/terminalvalues}
+SECRETS=${PASSAGE_DIR:-/state/secrets}
+
+yes=no changes=no diff=no to= secrets_to=
+while [ $# -gt 0 ]; do
+    case $1 in
+        --yes) yes=yes ;;
+        --changes) changes=yes ;;
+        --diff) diff=yes ;;
+        --to) to=${2:-}; shift ;;
+        --secrets-to) secrets_to=${2:-}; shift ;;
+        *) echo "tvbox-catch-up: unknown option $1" >&2; exit 2 ;;
+    esac
+    shift
+done
 cd "$INSIDE"
+
+# The first time, the folder gets its git history (the documents are
+# already there by Syncthing), and the box its secrets store.
 if [ ! -e .git ]; then
+    # No apostrophes in this message: they upset some shells, even here.
+    login=${TV_LOGIN:?the box has no login yet, so run tv join}
     echo "Fetching TV's history and code from tvhome..."
     tmp=$(mktemp -d /state/tv-git.XXXXXX)
     git clone -q --no-checkout -o tvhome "$login@$TVHOME_HOST:/srv/git/terminalvalues.git" "$tmp"
@@ -17,8 +49,115 @@ if [ ! -e .git ]; then
     git reset -q tvhome/main
     git checkout -- . ':!doc' ':!www' ':!ledger' ':!entity' ':!site'
 fi
-if [ ! -e "$PASSAGE_DIR/.git" ]; then
+if [ ! -e "$SECRETS/.git" ] && [ -n "${TV_LOGIN:-}" ]; then
     echo "Fetching TV's secrets from tvhome..."
-    git clone -q -o tvhome "$login@$TVHOME_HOST:/srv/git/terminalvalues-secrets.git" "$PASSAGE_DIR"
+    git clone -q -o tvhome "$TV_LOGIN@$TVHOME_HOST:/srv/git/terminalvalues-secrets.git" "$SECRETS"
 fi
-exec bin/tv-catch-up
+
+CODE=(.)
+# passage encrypts what's below a directory to that directory's own
+# .age-recipients, so a new one anywhere decides who reads new secrets.
+READERS=(':(glob)**/.age-recipients')
+git fetch -q tvhome
+[ -e "$SECRETS/.git" ] && git -C "$SECRETS" fetch -q tvhome
+
+# --- what would change (read-only, JSON) ------------------------------------
+
+# commits_json FORMAT FIELDS... RANGE...: git log lines as a JSON array of
+# objects, one field per %x1f-separated part.
+commits_json() {
+    local dir=$1 fields=$2; shift 2
+    git -C "$dir" log --format="$(printf '%s' "$fields" | sed 's/[a-z]*=//g; s/,/%x1f/g')" "$@" |
+        jq -Rn --arg names "$(printf '%s' "$fields" | sed 's/=[^,]*//g')" \
+            '($names | split(",")) as $n | [inputs | split("\u001f") as $v
+              | [range(0; $n | length) | {($n[.]): $v[.]}] | add]'
+}
+
+if [ "$changes" = yes ]; then
+    base=$(git merge-base HEAD tvhome/main)
+    code_diff=null
+    [ "$diff" = yes ] && code_diff=$(git diff "$base" tvhome/main -- "${CODE[@]}" | jq -Rs .)
+    if [ -e "$SECRETS/.git" ]; then
+        sbase=$(git -C "$SECRETS" merge-base HEAD tvhome/main)
+        secrets=$(jq -n --arg to "$(git -C "$SECRETS" rev-parse tvhome/main)" \
+            --arg readers "$(git -C "$SECRETS" diff "$sbase" tvhome/main -- "${READERS[@]}")" \
+            --argjson mine "$(git -C "$SECRETS" rev-list --count tvhome/main..HEAD)" \
+            '{to: $to, readers_diff: (if $readers == "" then null else $readers end), mine: $mine}')
+    else
+        secrets='{"to": null, "readers_diff": null, "mine": 0}'
+    fi
+    jq -n --arg to "$(git rev-parse tvhome/main)" \
+        --argjson incoming "$(commits_json . 'sha=%H,author=%an,subject=%s,when=%aI' HEAD..tvhome/main -- "${CODE[@]}")" \
+        --argjson files "$(git diff --name-only "$base" tvhome/main -- "${CODE[@]}" | jq -Rn '[inputs]')" \
+        --argjson mine "$(commits_json . 'sha=%H,subject=%s' tvhome/main..HEAD)" \
+        --argjson diff "$code_diff" --argjson secrets "$secrets" \
+        --argjson recent "$(commits_json . 'author=%an,subject=%s,when=%aI' -5 tvhome/main)" \
+        '{code: {to: $to, incoming: $incoming, files: $files, mine: $mine, diff: $diff},
+          secrets: $secrets, recent: $recent}'
+    exit 0
+fi
+
+# --- catching up -------------------------------------------------------------
+
+ask() {
+    [ "$yes" = yes ] && return 0
+    local answer
+    read -r -p "$1 [y/N] " answer || answer=
+    case "$answer" in [yY]*) return 0 ;; *) return 1 ;; esac
+}
+
+# rebase_onto DIR WHAT: put DIR's own commits on top of tvhome/main, or
+# leave everything as it was if they clash.
+rebase_onto() {
+    if [ "$(git -C "$1" rev-list --count tvhome/main..HEAD)" -eq 0 ]; then
+        git -C "$1" reset -q --keep tvhome/main
+    elif ! git -C "$1" rebase -q tvhome/main >/dev/null 2>&1; then
+        local clash
+        clash=$(git -C "$1" diff --name-only --diff-filter=U | tr '\n' ' ')
+        git -C "$1" rebase --abort
+        echo "Your $2 clash with tvhome's in: $clash"
+        echo "Left as it was. Ask your agent to merge them (tv git rebase tvhome/main), or ask in TV Signal."
+        exit 1
+    fi
+}
+
+# With --to (and --secrets-to), only exactly what was shown is applied.
+if [ -n "$to" ] && [ "$(git rev-parse tvhome/main)" != "$(git rev-parse "$to^{commit}" 2>/dev/null)" ] ||
+   { [ -n "$secrets_to" ] && [ -e "$SECRETS/.git" ] &&
+     [ "$(git -C "$SECRETS" rev-parse tvhome/main)" != "$(git -C "$SECRETS" rev-parse "$secrets_to^{commit}" 2>/dev/null)" ]; }; then
+    echo "tvhome has changed since you looked; review again."
+    exit 4
+fi
+
+if ! git diff --quiet HEAD -- "${CODE[@]}"; then
+    echo "You have uncommitted changes to code or instructions; commit or set them aside first:"
+    git diff --stat HEAD -- "${CODE[@]}"
+    exit 1
+fi
+
+base=$(git merge-base HEAD tvhome/main)
+incoming=$(git diff --stat "$base" tvhome/main -- "${CODE[@]}")
+if [ -n "$incoming" ]; then
+    echo "Code and instructions changed on tvhome since you last caught up:"
+    git log --format='  %h %an: %s' HEAD..tvhome/main -- "${CODE[@]}"
+    echo "$incoming"
+    echo "Read them with: tv git diff $(git rev-parse --short "$base") tvhome/main"
+    ask "Apply them?" || { echo "Left as it was."; exit 1; }
+fi
+rebase_onto . commits
+
+pending=no
+[ -n "$(git log --oneline tvhome/main..HEAD)" ] && pending=yes
+if [ -e "$SECRETS/.git" ]; then
+    sbase=$(git -C "$SECRETS" merge-base HEAD tvhome/main)
+    readers=$(git -C "$SECRETS" diff "$sbase" tvhome/main -- "${READERS[@]}")
+    if [ -n "$readers" ]; then
+        echo "Who can read TV's secrets is changing on tvhome:"
+        echo "$readers"
+        ask "Accept that?" || { echo "Secrets left as they were."; exit 1; }
+    fi
+    rebase_onto "$SECRETS" "secrets"
+    [ -n "$(git -C "$SECRETS" log --oneline tvhome/main..HEAD)" ] && pending=yes
+fi
+echo "Caught up with tvhome ($(git log -1 --format='%h %s'))."
+if [ "$pending" = yes ]; then echo "Yours aren't on tvhome yet: tv push sends them."; fi
