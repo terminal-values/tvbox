@@ -386,7 +386,9 @@ status_json() {
     if [ -n "$RT" ] && runtime_answers; then
         up=true box=$(box_state)
         if [ "$box" = running ]; then
-            inside=$(in_box tvbox-status --json 2>/dev/null) || inside='{"tailnet": null, "sync": null}'
+            inside=$(in_box tvbox-status --json 2>/dev/null)
+            # A box from before --json answers in words: no box half, then.
+            case $inside in "{"*) ;; *) inside='{"tailnet": null, "sync": null}' ;; esac
         fi
     fi
     printf '{"box": %s, "runtime": %s, "runtime_running": %s, "login": %s, "name": %s, "folder": %s, "port": %s, ' \

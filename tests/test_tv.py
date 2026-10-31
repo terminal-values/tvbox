@@ -882,3 +882,14 @@ def test_doctor_on_an_older_box_says_why_it_didnt_check(box):
     res = doctor_json(box, FAKE_STATE="running")  # the fake exec prints nothing
     assert "isn't running" not in res["tailnet"]["message"]
     assert "tv update" in res["tailnet"]["message"]
+
+
+def test_status_json_from_an_older_box_is_still_json(box):
+    # A box from before tvbox-status --json prints its sentences instead;
+    # found when the Mac app first ran against Danny's box.
+    box.runtimes("docker")
+    box.configure()
+    r = box.tv("status", "--json", FAKE_STATE="running",
+               FAKE_EXEC_OUT="On TV's tailnet.\nUp to date with tvhome (12 files).")
+    out = json.loads(r.stdout)
+    assert out["box"] == "running" and out["tailnet"] is None and out["sync"] is None

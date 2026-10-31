@@ -1,0 +1,76 @@
+import SwiftUI
+
+/// The everyday window: tall, standard macOS, TV's colours only in the
+/// gauges and the accent.
+struct MainWindow: View {
+    @Bindable var model: AppModel
+    var openDoctor: () -> Void = {}
+    @State private var reviewing = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+            Form {
+                StatusSection(model: model)
+                GaugesSection(model: model)
+                Section {
+                    if model.pendingCodeChanges > 0 {
+                        LabeledContent("\(model.pendingCodeChanges) code change\(model.pendingCodeChanges == 1 ? "" : "s") on tvhome") {
+                            Button("Review & Catch Up…") { reviewing = true }
+                                .buttonStyle(.borderedProminent)
+                        }
+                    }
+                    HStack {
+                        Button("Open Folder") { openFolder() }.disabled(model.status == nil)
+                        Spacer()
+                        Button("Open Pages") { Task { _ = try? await model.tv.run(["pages"]) } }
+                            .disabled(!model.isRunning)
+                    }
+                }
+                Section("Terminal") {
+                    TerminalSlot(model: model)
+                }
+                RecentSection(model: model)
+            }
+            .formStyle(.grouped)
+            FooterView(model: model, openDoctor: openDoctor)
+        }
+        .frame(width: 400)
+        .frame(minHeight: 720)
+        .onAppear { model.windowVisible(true) }
+        .onDisappear { model.windowVisible(false) }
+        .sheet(isPresented: $reviewing) { ChangesSheet(model: model) }
+        .alert("Something went wrong", isPresented: .constant(model.lastError != nil)) {
+            Button("OK") { model.lastError = nil }
+        } message: { Text(model.lastError ?? "") }
+    }
+
+    private var header: some View {
+        HStack(spacing: 10) {
+            Image(nsImage: NSApplication.shared.applicationIconImage)
+                .resizable().frame(width: 40, height: 40)
+            VStack(alignment: .leading) {
+                Text("Terminal Values").font(.headline)
+                if let login = model.status?.login, !login.isEmpty {
+                    Text("\(login) on \(Host.current().localizedName ?? "this Mac")")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 20).padding(.top, 14)
+    }
+
+    private func openFolder() {
+        guard let folder = model.status?.folder else { return }
+        NSWorkspace.shared.open(URL(fileURLWithPath: folder))
+    }
+}
+
+/// Where Task 10's terminal goes.
+struct TerminalSlot: View {
+    @Bindable var model: AppModel
+    var body: some View {
+        Text("terminal").foregroundStyle(.secondary).frame(height: 160)
+    }
+}

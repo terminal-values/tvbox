@@ -10,12 +10,10 @@ struct TerminalValuesApp: App {
             MenuContent(model: delegate.model)
                 .task { await delegate.model.menuOpened() }
         } label: {
-            Image(nsImage: MenuIcon.image(delegate.model.isRunning ? .running : .stopped,
-                                          attention: delegate.model.needsAttention))
+            MenuLabel(model: delegate.model)
         }
         Window("Terminal Values", id: "main") {
-            Text("Terminal Values")
-                .frame(width: 400, height: 640)
+            MainWindow(model: delegate.model)
         }
         .windowResizability(.contentSize)
     }
@@ -37,8 +35,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             await model.launch(atLogin: atLogin)
             model.startPolling()
         }
-        // Opened by hand (not at login), or not set up yet: show the window.
-        if !atLogin { showMainWindow() }
+        // Opened by hand (not at login): show the window.
+        if !atLogin { model.wantsWindow = true }
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
@@ -71,18 +69,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return .terminateLater
     }
 
-    func showMainWindow() {
-        NSApplication.shared.activate()
-        // The Window scene opens itself at launch; bring it forward.
-        for window in NSApplication.shared.windows where window.identifier?.rawValue == "main" {
-            window.makeKeyAndOrderFront(nil)
-        }
-    }
-
     /// Whether macOS opened the app as a login item.
     private static func launchedAtLogin() -> Bool {
         guard let event = NSAppleEventManager.shared().currentAppleEvent else { return false }
         return event.eventID == kAEOpenApplication &&
             event.paramDescriptor(forKeyword: keyAEPropData)?.enumCodeValue == keyAELaunchedAsLogInItem
+    }
+}
+
+/// The menu bar icon. It's also what opens the main window when the app
+/// asks (at launch, say): only a SwiftUI view can open a window scene.
+struct MenuLabel: View {
+    @Bindable var model: AppModel
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Image(nsImage: MenuIcon.image(model.isRunning ? .running : .stopped, attention: model.needsAttention))
+            .onAppear(perform: show)
+            .onChange(of: model.wantsWindow) { show() }
+    }
+
+    private func show() {
+        guard model.wantsWindow else { return }
+        model.wantsWindow = false
+        openWindow(id: "main")
+        NSApplication.shared.activate()
     }
 }
