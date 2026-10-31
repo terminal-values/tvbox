@@ -30,6 +30,10 @@ import Testing
         Row(check: .running, status: status(), keySaved: true, caughtUp: false, welcomeSeen: true, expect: .filling),
         Row(check: .running, status: status(needFiles: 4), keySaved: true, caughtUp: true, welcomeSeen: true, expect: .filling),
         Row(check: .running, status: status(), keySaved: true, caughtUp: true, welcomeSeen: true, expect: .done),
+        // After a reboot mid-setup the runtime is stopped; a joined member who
+        // hadn't saved their key still goes to the key (the final review).
+        Row(check: .runtimeStopped, status: status(box: .stopped), keySaved: false, caughtUp: false, welcomeSeen: true, expect: .saveKey),
+        Row(check: .runtimeStopped, status: status(box: .stopped), keySaved: true, caughtUp: false, welcomeSeen: true, expect: .waiting),
     ]
 
     @Test(arguments: rows) func resumeStepCoversEveryState(_ row: Row) {
@@ -120,5 +124,32 @@ import Testing
         try Fixture.statusRunning.write(to: fake.dir.appendingPathComponent("status.out"), atomically: true, encoding: .utf8)
         await model.refresh()
         #expect(!walk.shouldShow)
+    }
+}
+
+
+@MainActor @Suite struct WalkthroughMemoryTests {
+    func defaults() -> UserDefaults { UserDefaults(suiteName: "tv-tests-\(UUID().uuidString)")! }
+    var notJoined: String { Fixture.statusStopped.replacingOccurrences(of: "\"login\": \"sam\"", with: "\"login\": \"\"") }
+
+    @Test func aSkippedKeyIsRemindedAfterARelaunch() async throws {
+        let d = defaults()
+        let fake = try FakeTV(answers: ["check": "running\n", "status": Fixture.statusRunning])
+        let first = WalkthroughController(model: AppModel(tv: fake.tv), defaults: d)
+        first.skipKey()
+        let model = AppModel(tv: fake.tv)
+        let again = WalkthroughController(model: model, defaults: d)
+        await again.resume()
+        #expect(model.keyNotSaved)
+    }
+
+    @Test func aComputerThatLeftForgetsItsOldSetup() async throws {
+        let d = defaults()
+        for k in ["keySaved", "firstCatchUpDone", "walkthroughFinished", "keySkipped"] { d.set(true, forKey: k) }
+        let fake = try FakeTV(answers: ["check": "not-joined\n", "status": notJoined])
+        let walk = WalkthroughController(model: AppModel(tv: fake.tv), defaults: d)
+        await walk.resume()
+        #expect(!walk.keySaved && !walk.firstCatchUpDone)
+        #expect(!d.bool(forKey: "walkthroughFinished") && !d.bool(forKey: "keySkipped"))
     }
 }

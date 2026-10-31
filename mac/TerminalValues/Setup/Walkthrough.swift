@@ -34,7 +34,7 @@ func resumeStep(check: CheckState, status: Status?, keySaved: Bool,
     let joined = !(status?.login.isEmpty ?? true)
     if !joined && !welcomeSeen { return .welcome }
     switch check {
-    case .noRuntime, .runtimeStopped: return joined ? .waiting : .runtime
+    case .noRuntime, .runtimeStopped: if !joined { return .runtime }
     case .notJoined: return .aboutYou
     case .stopped, .running: break
     }

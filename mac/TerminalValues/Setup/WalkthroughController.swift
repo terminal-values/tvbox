@@ -39,7 +39,13 @@ final class WalkthroughController {
 
     func resume() async {
         await model.refresh()
-        if model.status != nil && !model.isSetUp { set("walkthroughStarted") }
+        if model.status != nil && !model.isSetUp {
+            set("walkthroughStarted")
+            // A computer that has left (tv uninstall, a new join) starts afresh:
+            // its new key is a new key to save.
+            for k in ["keySaved", "firstCatchUpDone", "walkthroughFinished", "keySkipped"] { set(k, false) }
+        }
+        model.keyNotSaved = flag("keySkipped") && !keySaved
         step = resumeStep(check: model.check ?? .noRuntime, status: model.status, keySaved: keySaved,
                           firstCatchUpDone: firstCatchUpDone, welcomeSeen: welcomeSeen)
         if step == .tellDanny || step == .saveKey { await loadIdentity() }
@@ -126,11 +132,13 @@ final class WalkthroughController {
             return
         }
         set("keySaved")
+        set("keySkipped", false)
         model.keyNotSaved = false
         await resume()
     }
 
     func skipKey() {
+        set("keySkipped")
         model.keyNotSaved = true
         go(.waiting)
         Task { await waitForDanny() }
