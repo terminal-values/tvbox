@@ -543,7 +543,7 @@ cmd_doctor() {
     fi
     # In words: one line per check, and the command for any fix.
     printf '[%s]\n' "${results%,}" | sed 's/},[[:space:]]*{/}\n{/g; s/^\[//; s/\]$//' |
-        sed -nE 's/.*"id": "([^"]*)", "status": "([^"]*)", "message": "(.*)", "fix": (null|"([^"]*)")}.*/\2|\1|\3|\5/p' |
+        sed -nE 's/.*"id": *"([^"]*)", *"status": *"([^"]*)", *"message": *"(.*)", *"fix": *(null|"([^"]*)")}.*/\2|\1|\3|\5/p' |
         while IFS='|' read -r st id msg fx; do
             case $fx in
                 start-runtime) fx="tv runtime-start" ;; start-box) fx="tv start" ;;

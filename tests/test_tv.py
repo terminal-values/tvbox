@@ -937,3 +937,12 @@ def test_doctor_compares_with_the_apps_pin(box):
     assert res["newer-box"]["status"] == "ok"
     res = doctor_json(box, FAKE_STATE="running", FAKE_EXEC_OUT=BOX_DOCTOR, TV_PINNED_REVISION="d" * 40)
     assert res["newer-box"]["status"] == "warning" and res["newer-box"]["fix"] == "update"
+
+
+def test_doctor_in_words_reads_the_boxs_compact_json(box):
+    # Found on Danny's box: tvbox-doctor writes jq -c's compact JSON, and the
+    # words form dropped every one of the box's checks.
+    updatable(box, revision=NEW)
+    compact = json.dumps(json.loads(BOX_DOCTOR), separators=(",", ":"))
+    r = box.tv("doctor", FAKE_STATE="running", FAKE_EXEC_OUT=compact)
+    assert [line.split()[1] for line in r.stdout.splitlines()] == ALL_IDS
