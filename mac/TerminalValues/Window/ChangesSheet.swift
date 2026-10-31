@@ -21,6 +21,8 @@ struct ChangesSheet: View {
                     diffView(readers)
                 }
                 diffView(c.code.diff ?? "")
+            } else if let note {
+                Button("Try Again") { self.note = nil; Task { await load() } }
             } else {
                 ProgressView()
             }
@@ -45,7 +47,12 @@ struct ChangesSheet: View {
     }
 
     private func load() async {
-        shown = try? await model.tv.json(Changes.self, ["changes", "--diff"], timeout: .seconds(60))
+        do {
+            shown = try await model.tv.json(Changes.self, ["changes", "--diff"], timeout: .seconds(60))
+        } catch {
+            shown = nil
+            note = "Couldn't get the changes from tvhome: \(error)"
+        }
     }
 
     private func apply() async {

@@ -7,6 +7,8 @@ final class Doctor {
     let model: AppModel
     var report: DoctorReport?
     var running = false
+    /// Why the check-up couldn't run, in words.
+    var problem: String?
 
     init(model: AppModel) { self.model = model }
 
@@ -29,7 +31,13 @@ final class Doctor {
     func run() async {
         running = true
         defer { running = false }
-        report = try? await doctorTV.json(DoctorReport.self, ["doctor", "--json"], timeout: .seconds(180))
+        do {
+            report = try await doctorTV.json(DoctorReport.self, ["doctor", "--json"], timeout: .seconds(180))
+            problem = nil
+        } catch {
+            report = nil
+            problem = "The check-up couldn't run: \(error)"
+        }
     }
 
     /// Makes the fix, then checks again.

@@ -30,6 +30,8 @@ final class AppModel {
     /// development build). With it, the box to have is that one, not main's.
     var pinned: BoxImage?
     var busy: String?
+    /// Why the last refresh got nothing from tv, in words (nil when it worked).
+    var statusProblem: String?
     /// Set to ask for the main window; the menu bar icon's view opens it,
     /// since only SwiftUI views can open a window scene.
     var wantsWindow = false
@@ -79,7 +81,12 @@ final class AppModel {
     /// The quick facts, every 30 seconds.
     func refresh() async {
         check = try? await tv.check()
-        if let s = try? await tv.json(Status.self, ["status", "--json"]) { status = s }
+        do {
+            status = try await tv.json(Status.self, ["status", "--json"])
+            statusProblem = nil
+        } catch {
+            statusProblem = "\(error)"
+        }
     }
 
     /// The slower ones, every 15 minutes: code waiting on tvhome, a newer box.

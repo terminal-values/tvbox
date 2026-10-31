@@ -16,6 +16,9 @@ struct StatusSection: View {
                     .foregroundStyle(model.isRunning ? .green : .secondary)
                     .labelStyle(.titleAndIcon)
             }
+            if let problem = model.statusProblem {
+                Text(problem).font(.caption).foregroundStyle(.red).textSelection(.enabled)
+            }
             LabeledContent("TV's network", value: networkLine)
             LabeledContent("Documents", value: documentsLine)
             if let folder = model.status?.folder {

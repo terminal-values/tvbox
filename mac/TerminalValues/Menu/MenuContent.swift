@@ -41,7 +41,7 @@ struct MenuContent: View {
 
     private var statusLine: String {
         if let busy = model.busy { return busy }
-        guard let s = model.status else { return "Checking…" }
+        guard let s = model.status else { return model.statusProblem == nil ? "Checking…" : "tv isn't answering" }
         if !model.isSetUp { return "Not set up yet" }
         guard s.box == .running else { return "The box is stopped" }
         switch (s.tailnet, s.sync) {

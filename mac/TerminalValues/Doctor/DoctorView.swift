@@ -14,6 +14,7 @@ struct DoctorView: View {
                 if doctor.running { ProgressView().controlSize(.small) }
                 Button("Run Again") { Task { await doctor.run() } }.disabled(doctor.running)
             }
+            if let problem = doctor.problem { Text(problem).foregroundStyle(.red).textSelection(.enabled) }
             Form {
                 ForEach(doctor.report?.results ?? []) { r in
                     LabeledContent {
