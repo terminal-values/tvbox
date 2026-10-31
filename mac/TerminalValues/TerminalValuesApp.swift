@@ -15,6 +15,10 @@ struct TerminalValuesApp: App {
         Window("Terminal Values", id: "main") {
             MainWindow(model: delegate.model, terminal: delegate.terminal, walk: delegate.walkthrough)
         }
+        Window("Tutorial", id: "tutorial") {
+            TutorialView(tour: delegate.tutorial, model: delegate.model, terminal: delegate.terminal)
+        }
+        .windowResizability(.contentSize)
         .windowResizability(.contentSize)
     }
 }
@@ -27,6 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// doesn't end a command running in it.
     let terminal = TerminalSession(tvDirectory: Bundle.main.resourceURL!)
     lazy var walkthrough = WalkthroughController(model: model)
+    let tutorial = TutorialProgress()
     private var quitting = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -89,6 +94,11 @@ struct MenuLabel: View {
         Image(nsImage: MenuIcon.image(model.isRunning ? .running : .stopped, attention: model.needsAttention))
             .onAppear(perform: show)
             .onChange(of: model.wantsWindow) { show() }
+            .onChange(of: model.tutorialRequested) {
+                guard model.tutorialRequested else { return }
+                model.tutorialRequested = false
+                openWindow(id: "tutorial")
+            }
     }
 
     private func show() {

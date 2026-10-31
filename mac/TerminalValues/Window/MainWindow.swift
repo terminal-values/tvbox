@@ -8,6 +8,7 @@ struct MainWindow: View {
     @Bindable var walk: WalkthroughController
     var openDoctor: () -> Void = {}
     @State private var reviewing = false
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         Group {
@@ -38,6 +39,8 @@ struct MainWindow: View {
                         Spacer()
                         Button("Open Pages") { Task { _ = try? await model.tv.run(["pages"]) } }
                             .disabled(!model.isRunning)
+                        Spacer()
+                        Button("Tutorial") { openWindow(id: "tutorial") }
                     }
                 }
                 Section("Terminal") {
