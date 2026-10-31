@@ -2,6 +2,7 @@
 
 TVBOX_SOURCE points the installer at this checkout instead of GitHub."""
 import os
+import platform
 import shutil
 import subprocess
 import sys
@@ -60,43 +61,6 @@ def test_leaves_path_alone_when_present(home):
 
 
 @pytest.mark.skipif(sys.platform != "darwin", reason="the app is for macOS")
-def test_builds_mac_app(home):
-    install(home)
-    app = home / "Applications/Terminal Values.app"
-    assert (app / "Contents/Resources/Scripts/main.scpt").exists()
-    xattrs = subprocess.run(["xattr", str(app)], capture_output=True, text=True).stdout
-    assert "com.apple.quarantine" not in xattrs
-
-
-@pytest.mark.skipif(sys.platform != "darwin", reason="the app is for macOS")
-def test_mac_app_has_the_tv_icon(home, tmp_path):
-    install(home)
-    icon = home / "Applications/Terminal Values.app/Contents/Resources/applet.icns"
-    plain = tmp_path / "plain.app"
-    subprocess.run(["osacompile", "-o", str(plain), "-e", "return"], check=True)
-    assert icon.read_bytes() != (plain / "Contents/Resources/applet.icns").read_bytes()
-    assert icon.read_bytes()[:4] == b"icns"
-
-
-def test_uninstall_removes_line_app_and_tv(home, tmp_path):
-    install(home)
-    bin_ = tmp_path / "fakebin"
-    bin_.mkdir()
-    (bin_ / "docker").symlink_to(FAKE)
-    log = tmp_path / "log"
-    r = subprocess.run(["sh", str(home / ".local/bin/tv"), "uninstall", "--yes-keep-state"],
-                       env=env(home, path=f"{bin_}:/usr/bin:/bin", FAKE_LOG=str(log),
-                               FAKE_STATE="running"),
-                       capture_output=True, text=True)
-    assert r.returncode == 0, r.stdout + r.stderr
-    assert not (home / ".local/bin/tv").exists()
-    assert MARK not in (home / ".zshrc").read_text()
-    assert not (home / "Applications/Terminal Values.app").exists()
-    calls = log.read_text()
-    assert '"rm"' in calls and "tvbox" in calls
-    assert '"volume", "rm"' not in calls.replace("  ", " ")
-
-
 def test_tv_folder_prints_the_folder(home):
     cfg = home / ".config/tv"
     cfg.mkdir(parents=True)
@@ -143,16 +107,6 @@ def test_next_step_names_tv_by_its_full_path_until_the_path_has_it(home):
     assert "Next: tv join" in r.stdout
 
 
-def test_mac_app_answers_every_click_with_its_window():
-    # In the outsider test, a click on a stopped box opened the folder in
-    # Finder and nothing else, so the app seemed to do different things.
-    src = (ROOT / "mac" / "Terminal Values.applescript").read_text()
-    start = src[src.index("on startBox()"):src.index("end startBox")]
-    assert "openFolder" not in start
-    run = src[src.index("on run"):]
-    assert run.index('state is "stopped"') < run.index("showRunning()")
-
-
 def test_without_a_terminal_it_finishes_and_says_what_is_next(home):
     # Found in the Linux run: with no terminal (an agent installing for
     # someone), the check for /dev/tty made sh exit 2 without a word.
@@ -166,17 +120,6 @@ def test_without_a_terminal_it_finishes_and_says_what_is_next(home):
     assert "tv join" in r.stdout
 
 
-def test_mac_app_takes_the_invitation_from_the_clipboard():
-    # The final review: pasted into a dialog, the invitation then sat in a
-    # shell command line that other users' ps can see.
-    src = (ROOT / "mac" / "Terminal Values.applescript").read_text()
-    join = src[src.index("on join()"):src.index("end join")]
-    assert "--from-clipboard" in join
-    assert "invitation" not in join.replace("the invitation", "").replace("Invitation", "") \
-        or "quoted form of invitation" not in join
-    assert "hidden answer" not in join
-
-
 def test_reinstalling_on_a_joined_computer_doesnt_say_join(home):
     # Rerunning the installer is how the Mac app gets rebuilt after an update.
     cfg = home / ".config/tv"
@@ -186,3 +129,72 @@ def test_reinstalling_on_a_joined_computer_doesnt_say_join(home):
     assert r.returncode == 0, r.stdout + r.stderr
     assert "tv join" not in r.stdout
     assert "already joined" in r.stdout
+
+
+def test_installer_on_a_mac_builds_no_app(home):
+    # The Swift app, downloaded, replaces the one the installer used to build.
+    r = install(home)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert not (home / "Applications/Terminal Values.app").exists()
+    if platform.system() == "Darwin":
+        assert "github.com/terminal-values/tvbox/releases" in r.stdout
+
+
+def run_uninstall(home, tmp_path, **env_extra):
+    bin_ = tmp_path / "fakebin"
+    bin_.mkdir(exist_ok=True)
+    if not (bin_ / "docker").exists():
+        (bin_ / "docker").symlink_to(FAKE)
+    log = tmp_path / "log"
+    return subprocess.run(["sh", str(home / ".local/bin/tv"), "uninstall", "--yes-keep-state"],
+                          env=env(home, path=f"{bin_}:/usr/bin:/bin", FAKE_LOG=str(log),
+                                  FAKE_STATE="running", **env_extra),
+                          capture_output=True, text=True), log
+
+
+def test_uninstall_removes_line_tv_and_an_applescript_app(home, tmp_path):
+    install(home)
+    old = home / "Applications/Terminal Values.app/Contents/Resources/Scripts"
+    old.mkdir(parents=True)
+    (old / "main.scpt").write_text("compiled")
+    r, log = run_uninstall(home, tmp_path)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert not (home / ".local/bin/tv").exists()
+    assert MARK not in (home / ".zshrc").read_text()
+    assert not (home / "Applications/Terminal Values.app").exists()
+    calls = log.read_text()
+    assert '"rm"' in calls and "tvbox" in calls
+    assert '"volume", "rm"' not in calls.replace("  ", " ")
+
+
+def test_uninstall_removes_only_an_applescript_app(home, tmp_path):
+    install(home)
+    decoy = home / "Applications/Terminal Values.app/Contents/MacOS"
+    decoy.mkdir(parents=True)
+    r, _ = run_uninstall(home, tmp_path)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert decoy.exists()
+
+
+def test_uninstall_spares_the_app_in_applications(home, tmp_path):
+    install(home)
+    apps = tmp_path / "Applications"
+    (apps / "Terminal Values.app/Contents/MacOS").mkdir(parents=True)
+    r, _ = run_uninstall(home, tmp_path, TVBOX_SYSTEM_APPS=str(apps))
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert (apps / "Terminal Values.app").exists()
+    assert "Trash" in r.stdout
+
+
+def test_uninstall_removes_a_symlinked_tv(home, tmp_path):
+    install(home)
+    target = tmp_path / "app-tv"
+    target.write_text((home / ".local/bin/tv").read_text())
+    target.chmod(0o755)
+    (home / ".local/bin/tv").unlink()
+    (home / ".local/bin/tv").symlink_to(target)
+    r = subprocess.run(["sh", str(target), "uninstall", "--yes-keep-state"],
+                       env=env(home, path="/usr/bin:/bin"), capture_output=True, text=True)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert not (home / ".local/bin/tv").is_symlink() and not (home / ".local/bin/tv").exists()
+    assert target.exists()

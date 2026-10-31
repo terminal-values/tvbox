@@ -656,8 +656,13 @@ cmd_uninstall() {
             say "Took the PATH line out of $rc."
         fi
     done
-    rm -rf "$HOME/Applications/Terminal Values.app"
+    # The AppleScript app the installer used to make, but nothing else of
+    # that name; and never the downloaded app, which goes to the Trash by hand.
+    old_app="$HOME/Applications/Terminal Values.app"
+    [ -e "$old_app/Contents/Resources/Scripts/main.scpt" ] && rm -rf "$old_app"
     rm -f "$CONFIG" "$HOME/.local/bin/tv"
+    app="${TVBOX_SYSTEM_APPS:-/Applications}/Terminal Values.app"
+    [ -d "$app" ] && say "Drag $app to the Trash to remove the app too."
     say "tv is uninstalled.${FOLDER:+ The TV folder, $FOLDER, is still there.}"
 }
 

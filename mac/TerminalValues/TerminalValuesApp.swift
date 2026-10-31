@@ -42,6 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         // The unit tests run inside the app: never touch the real box then.
         if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil { return }
+        moveIn()
         let atLogin = Self.launchedAtLogin()
         Task {
             await model.launch(atLogin: atLogin)
@@ -79,6 +80,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApplication.shared.reply(toApplicationShouldTerminate: true)
         }
         return .terminateLater
+    }
+
+    /// Only an installed app moves in: a development build run from
+    /// elsewhere mustn't re-point the member's tv at itself.
+    private func moveIn() {
+        guard Bundle.main.bundleURL.path.hasPrefix("/Applications/"),
+              let bundled = Bundle.main.url(forResource: "tv", withExtension: nil) else { return }
+        let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
+        guard let said = try? migrate(home: FileManager.default.homeDirectoryForCurrentUser,
+                                      bundledTV: bundled, shell: shell), !said.isEmpty else { return }
+        let alert = NSAlert()
+        alert.messageText = "Terminal Values has moved in."
+        alert.informativeText = said.joined(separator: "\n\n")
+        alert.runModal()
     }
 
     /// Whether macOS opened the app as a login item.
