@@ -6,6 +6,7 @@ first) to $FAKE_LOG. Behaviour:
   FAKE_DOWN=1          the runtime's service isn't running
   FAKE_STATE=...       the box is running, stopped or absent (default absent)
   FAKE_RUN_FAILS=1     making the box fails (as when its port is taken)
+  FAKE_EXEC_OUT=...    what exec prints
 """
 import json
 import os
@@ -28,6 +29,9 @@ if down:
 if verb == "run" and os.environ.get("FAKE_RUN_FAILS") == "1":
     print("Error: bind: Address already in use", file=sys.stderr)
     sys.exit(1)
+if verb == "exec" and "FAKE_EXEC_OUT" in os.environ:
+    print(os.environ["FAKE_EXEC_OUT"])
+    sys.exit(0)
 if verb == "inspect":
     if state == "absent":
         print("no such container", file=sys.stderr)

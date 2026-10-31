@@ -19,7 +19,7 @@ FAKE = Path(__file__).resolve().parent / "fakeruntime"
 # dash, Debian's sh and the strictest about POSIX, when this machine has it.
 SH = shutil.which("dash") or "sh"
 TOOLS = ["sh", "env", "python3", "id", "mkdir", "cat", "sed", "grep", "ls",
-         "uname", "mv", "rm", "rmdir", "tr", "dirname", "head", "chmod", "basename"]
+         "uname", "mv", "rm", "rmdir", "tr", "dirname", "head", "chmod", "basename", "awk"]
 
 
 @pytest.fixture
@@ -657,3 +657,50 @@ def test_join_from_clipboard_without_a_terminal_gives_up(box):
     assert r.returncode == 2
     assert "copy" in (r.stdout + r.stderr).lower()
     assert not [c for c in box.calls() if len(c) > 1 and c[1] == "run"]
+
+
+# --- status --json, for the Mac app -----------------------------------------
+
+def test_status_json_when_stopped(box):
+    box.runtimes("docker")
+    box.configure(PORT="8485")
+    r = box.tv("status", "--json", FAKE_STATE="stopped")
+    assert r.returncode == 0, r.stdout + r.stderr
+    out = json.loads(r.stdout)
+    assert out["box"] == "stopped" and out["tailnet"] is None and out["sync"] is None
+    assert out["folder"] == str(box.home / "terminalvalues") and out["port"] == 8485
+    assert out["login"] == "sam" and out["name"] == "Sam Smith"
+    assert out["runtime"] == "docker" and out["runtime_running"] is True
+
+
+def test_status_json_quotes_odd_folder_names(box):
+    box.runtimes("docker")
+    odd = str(box.home / 'my "TV" folder\\here')
+    box.configure(FOLDER=odd)
+    r = box.tv("status", "--json", FAKE_STATE="absent")
+    assert json.loads(r.stdout)["folder"] == odd
+
+
+def test_status_json_with_runtime_down(box):
+    box.runtimes("docker")
+    box.configure()
+    r = box.tv("status", "--json", FAKE_DOWN="1")
+    assert r.returncode == 0, r.stdout + r.stderr
+    out = json.loads(r.stdout)
+    assert out["runtime_running"] is False and out["box"] == "absent"
+
+
+def test_status_json_with_no_runtime(box):
+    box.configure()
+    out = json.loads(box.tv("status", "--json").stdout)
+    assert out["runtime"] == "none" and out["runtime_running"] is False
+
+
+def test_status_json_splices_the_box_half(box):
+    box.runtimes("docker")
+    box.configure()
+    r = box.tv("status", "--json", FAKE_STATE="running",
+               FAKE_EXEC_OUT='{"tailnet": "on", "sync": {"connected": true}}')
+    out = json.loads(r.stdout)
+    assert out["box"] == "running" and out["tailnet"] == "on" and out["sync"] == {"connected": True}
+    assert box.call("exec")[-2:] == ["tvbox-status", "--json"]

@@ -1,11 +1,15 @@
 #!/bin/sh
 # Is the box on TV's tailnet, and is the TV folder up to date with tvhome's?
 # Exits 1 if it isn't on the tailnet or isn't connected to tvhome's Syncthing.
+# With --json (for the Mac app): the same facts as one JSON object, exit 0.
 set -u
 . "${TVBOX_ENV:-/state/tvhome.env}"
 ST=${TVBOX_ST:-/state/syncthing}
+json=no
+[ "${1:-}" = --json ] && json=yes
 
-bad=0
+# --- the facts ---------------------------------------------------------------
+
 ts=$(tailscale status --json 2>/dev/null)
 state=$(printf '%s' "$ts" | jq -r '.BackendState // empty' 2>/dev/null)
 # Running but not online: offline, or this box was taken off the tailnet.
@@ -13,22 +17,60 @@ state=$(printf '%s' "$ts" | jq -r '.BackendState // empty' 2>/dev/null)
 [ "$state" = Running ] && [ "$(printf '%s' "$ts" | jq -r '.Self.Online' 2>/dev/null)" = false ] &&
     state=Offline
 case $state in
-    Running) echo "On TV's tailnet." ;;
-    Offline)
+    Running) tailnet=on ;;
+    Offline) tailnet=offline ;;
+    NeedsLogin|NeedsMachineAuth) tailnet=not-joined ;;
+    *) tailnet=connecting ;;
+esac
+
+connected=false shared=false need=0 need_bytes=0 global=0 sending=0
+if [ "$tailnet" != offline ]; then
+    key=$(sed -n 's:.*<apikey>\(.*\)</apikey>.*:\1:p' "$ST/config.xml" 2>/dev/null)
+    api() { curl -fsS --noproxy '*' -H "X-API-Key: $key" "http://127.0.0.1:8384/rest/$1" 2>/dev/null; }
+    connected=$(api system/connections |
+        jq -r --arg id "${TVHOME_SYNCTHING_ID:-}" '.connections[$id].connected // false' 2>/dev/null)
+    [ "$connected" = true ] || connected=false
+fi
+if [ "$connected" = true ]; then
+    local=$(api "db/status?folder=terminalvalues")
+    remote=$(api "db/completion?folder=terminalvalues&device=${TVHOME_SYNCTHING_ID}")
+    field() { printf '%s' "$1" | jq -r "$2 // 0" 2>/dev/null; }
+    if [ "$(field "$remote" .remoteState)" != notSharing ]; then
+        shared=true
+        need=$(( $(field "$local" .needFiles) + $(field "$local" .needDeletes) ))
+        need_bytes=$(field "$local" .needBytes)
+        global=$(field "$local" .globalFiles)
+        sending=$(field "$remote" .needItems)
+    fi
+fi
+# TV's folder is never empty: none at all means tvhome's list hasn't come yet.
+waiting=false
+[ "$shared" = true ] && [ "$need" -eq 0 ] && [ "$global" -eq 0 ] && waiting=true
+
+if [ "$json" = yes ]; then
+    jq -n --arg tailnet "$tailnet" --argjson connected "$connected" --argjson shared "$shared" \
+        --argjson waiting "$waiting" --argjson files "$global" --argjson need "$need" \
+        --argjson need_bytes "$need_bytes" --argjson sending "$sending" \
+        '{tailnet: $tailnet, sync: {connected: $connected, shared: $shared,
+          waiting_for_list: $waiting, files: $files, need_files: $need,
+          need_bytes: $need_bytes, sending: $sending}}'
+    exit 0
+fi
+
+# --- in words ----------------------------------------------------------------
+
+bad=0
+case $tailnet in
+    on) echo "On TV's tailnet." ;;
+    offline)
         echo "Not reaching TV's tailnet: this computer may be offline, or Danny may have removed this box."
         echo "Documents aren't syncing."
         exit 1 ;;
-    NeedsLogin|NeedsMachineAuth)
+    not-joined)
         echo "Not on TV's tailnet: tv join, with a new invitation from Danny."; bad=1 ;;
     *)  echo "Connecting to TV's tailnet: the box has just started (or this computer is offline). Give it a minute."
         bad=1 ;;
 esac
-
-key=$(sed -n 's:.*<apikey>\(.*\)</apikey>.*:\1:p' "$ST/config.xml" 2>/dev/null)
-api() { curl -fsS --noproxy '*' -H "X-API-Key: $key" "http://127.0.0.1:8384/rest/$1" 2>/dev/null; }
-
-connected=$(api system/connections |
-    jq -r --arg id "${TVHOME_SYNCTHING_ID:-}" '.connections[$id].connected // false' 2>/dev/null)
 if [ "$connected" != true ]; then
     if [ "$bad" = 0 ]; then
         echo "Not connected to tvhome's Syncthing yet. Just after tv start that's normal; if you've only just joined, Danny may not have added this box yet (stage 3)."
@@ -37,26 +79,17 @@ if [ "$connected" != true ]; then
     fi
     exit 1
 fi
-
-local=$(api "db/status?folder=terminalvalues")
-remote=$(api "db/completion?folder=terminalvalues&device=${TVHOME_SYNCTHING_ID}")
-field() { printf '%s' "$1" | jq -r "$2 // 0" 2>/dev/null; }
-
-if [ "$(field "$remote" .remoteState)" = notSharing ]; then
+if [ "$shared" != true ]; then
     echo "Connected to tvhome, but it hasn't shared TV's folder with this box yet: ask Danny."
     exit "$bad"
 fi
-need=$(( $(field "$local" .needFiles) + $(field "$local" .needDeletes) ))
-global=$(field "$local" .globalFiles)
-sending=$(field "$remote" .needItems)
 if [ "$need" -gt 0 ]; then
-    mb=$(field "$local" '(.needBytes / 1048576 * 10 | round / 10)')
+    mb=$(printf '%s' "$need_bytes" | jq -r '(. / 1048576 * 10 | round / 10)')
     echo "Getting TV's documents from tvhome: $need of $global files to go ($mb MB)."
 fi
 [ "$sending" -gt 0 ] && echo "Sending your changes to tvhome: $sending files to go."
 if [ "$need" -eq 0 ] && [ "$sending" -eq 0 ]; then
-    # TV's folder is never empty: none at all means tvhome's list hasn't come yet.
-    if [ "$global" -eq 0 ]; then echo "Waiting for tvhome's list of TV's documents."
+    if [ "$waiting" = true ]; then echo "Waiting for tvhome's list of TV's documents."
     else echo "Up to date with tvhome ($global files)."; fi
 fi
 exit "$bad"

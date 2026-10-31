@@ -149,6 +149,16 @@ default_folder() {
 
 quote() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
 
+# json_str STRING: STRING as a JSON string literal, for the Mac app's --json
+# output (backslashes, quotes and control characters escaped).
+json_str() {
+    printf '%s' "$1" | awk 'BEGIN { ORS = ""; print "\"" }
+        NR > 1 { print "\\n" }
+        { gsub(/\\/, "\\\\"); gsub(/"/, "\\\""); gsub(/\t/, "\\t"); gsub(/\r/, "\\r")
+          gsub(/[\001-\037]/, ""); print }
+        END { print "\"" }'
+}
+
 write_config() {
     mkdir -p "$(dirname "$CONFIG")"
     {
@@ -357,6 +367,7 @@ cmd_stop() {
 }
 
 cmd_status() {
+    [ "${1:-}" = --json ] && { status_json; return; }
     runtime_up
     if [ "$(box_state)" != running ]; then
         say "The box is not running, so your changes are not syncing. Start it with: tv start"
@@ -366,6 +377,26 @@ cmd_status() {
 }
 
 # tv pages [PATH]: TV's internal pages, or one of them (a path in www/).
+# tv status --json: what the Mac app shows. Exit 0 whenever it could tell,
+# even with no runtime; the box's own half (tailnet, sync) only if it runs.
+status_json() {
+    detect_runtime
+    [ -n "$RT" ] && find_runtime  # which also says whose uid the box runs as
+    rt=${RT:-none} up=false box=absent inside='{"tailnet": null, "sync": null}'
+    if [ -n "$RT" ] && runtime_answers; then
+        up=true box=$(box_state)
+        if [ "$box" = running ]; then
+            inside=$(in_box tvbox-status --json 2>/dev/null) || inside='{"tailnet": null, "sync": null}'
+        fi
+    fi
+    printf '{"box": %s, "runtime": %s, "runtime_running": %s, "login": %s, "name": %s, "folder": %s, "port": %s, ' \
+        "$(json_str "$box")" "$(json_str "$rt")" "$up" "$(json_str "$LOGIN")" "$(json_str "$NAME")" \
+        "$(json_str "$FOLDER")" "${PORT:-0}"
+    # The box's object, without its braces, completes this one.
+    printf '%s\n' "$inside" | tr -d '\n' | sed 's/^[[:space:]]*{//; s/}[[:space:]]*$//'
+    printf '}\n'
+}
+
 cmd_pages() {
     need_box
     url=http://127.0.0.1:$PORT/$(printf '%s' "${1:-}" | sed 's:^/*::; s/ /%20/g')
@@ -547,7 +578,7 @@ case $cmd in
     join) cmd_join "$@" ;;
     start) cmd_start ;;
     stop) cmd_stop ;;
-    status) cmd_status ;;
+    status) cmd_status "$@" ;;
     catch-up) need_box; in_box tvbox-catch-up ;;
     push) need_box; in_box tvbox-push ;;
     git|passage) need_box; in_box "$cmd" "$@" ;;

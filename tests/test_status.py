@@ -38,7 +38,7 @@ def status(tmp_path):
     api = tmp_path / "api"
     api.mkdir()
 
-    def run(ts="Running", connected=True, local=None, remote=None, online="true"):
+    def run(ts="Running", connected=True, local=None, remote=None, online="true", args=()):
         (api / "system_connections").write_text(json.dumps(
             {"connections": {TVHOME: {"connected": connected}}}))
         if local is not None:
@@ -48,7 +48,7 @@ def status(tmp_path):
         env = {**os.environ, "PATH": f"{bin_}:{os.environ['PATH']}", "FAKE_API": str(api),
                "FAKE_TS": ts or "", "FAKE_ONLINE": online,
                "TVBOX_ENV": str(env_file), "TVBOX_ST": str(st)}
-        return subprocess.run(["sh", str(ROOT / "box" / "tvbox-status")], env=env,
+        return subprocess.run(["sh", str(ROOT / "box" / "tvbox-status"), *args], env=env,
                               capture_output=True, text=True)
     return run
 
@@ -116,3 +116,46 @@ def test_a_box_off_the_tailnet_doesnt_trust_a_stale_connection(status):
     assert r.returncode == 1
     assert "On TV's tailnet" not in r.stdout and "Up to date" not in r.stdout
     assert "removed" in r.stdout and "offline" in r.stdout
+
+
+# --- --json, for the Mac app ------------------------------------------------
+
+def sync(**kw):
+    base = {"connected": True, "shared": True, "waiting_for_list": False, "files": 11,
+            "need_files": 0, "need_bytes": 0, "sending": 0}
+    return {**base, **kw}
+
+
+def test_json_up_to_date(status):
+    r = status(local=DONE_LOCAL, remote=DONE_REMOTE, args=["--json"])
+    assert r.returncode == 0
+    assert json.loads(r.stdout) == {"tailnet": "on", "sync": sync()}
+
+
+def test_json_getting_documents(status):
+    r = status(local={**DONE_LOCAL, "needFiles": 3, "needBytes": 2202010},
+               remote={**DONE_REMOTE, "needItems": 2}, args=["--json"])
+    assert json.loads(r.stdout) == {"tailnet": "on",
+                                    "sync": sync(need_files=3, need_bytes=2202010, sending=2)}
+
+
+def test_json_offline(status):
+    r = status(online="false", local=DONE_LOCAL, remote=DONE_REMOTE, args=["--json"])
+    assert r.returncode == 0
+    out = json.loads(r.stdout)
+    assert out["tailnet"] == "offline" and out["sync"]["connected"] is False
+
+
+def test_json_waiting_for_list(status):
+    r = status(local={**DONE_LOCAL, "globalFiles": 0}, remote=DONE_REMOTE, args=["--json"])
+    assert json.loads(r.stdout)["sync"] == sync(files=0, waiting_for_list=True)
+
+
+def test_json_not_connected_and_not_shared(status):
+    r = status(ts="Starting", connected=False, args=["--json"])
+    out = json.loads(r.stdout)
+    assert out["tailnet"] == "connecting" and out["sync"]["connected"] is False
+    r = status(local=DONE_LOCAL, remote={**DONE_REMOTE, "remoteState": "notSharing"}, args=["--json"])
+    assert json.loads(r.stdout)["sync"]["shared"] is False
+    r = status(ts="NeedsLogin", connected=False, args=["--json"])
+    assert json.loads(r.stdout)["tailnet"] == "not-joined"
