@@ -27,9 +27,10 @@ does the syncing, the git and the secrets.
 Values.app from the [latest release](https://github.com/terminal-values/tvbox/releases/latest),
 drag it to Applications and open it. It walks you through the rest without
 Terminal: Apple's [`container`](https://github.com/apple/container) (the
-one thing installed for the whole Mac, with your password), your login, the
-invitation you were sent (one line, `tvjoin:TAILNET:SYNCTHING-ID:KEY`,
-picked up from the clipboard so the key is never pasted or shown), saving
+one thing installed for the whole Mac, with your password), the invitation
+you were sent (one line, `tvjoin:TAILNET:SYNCTHING-ID:LOGIN:KEY`, which
+holds the login you agreed with Danny; it's picked up from the clipboard so
+the key is never pasted or shown), saving
 your key, and the folder filling. After that it lives in the menu bar, and
 puts its own `tv` in `~/.local/bin` for terminals and agents.
 
@@ -42,7 +43,7 @@ curl -fsSL https://raw.githubusercontent.com/terminal-values/tvbox/main/install.
 
 That puts `tv` in `~/.local/bin` (adding it to your PATH only if it isn't
 there, and saying so), no sudo, and runs `tv join`, which asks for your
-login name and email and then for the invitation.
+name and email and then for the invitation.
 
 `tv uninstall` takes all of it away again, asking before it deletes the
 box's storage (which holds your age key).

@@ -14,6 +14,8 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 STID = "MVOEDBP-QTCGNI7-Q6ZZW22-HCGLNE5-5EQZ4NS-5USUULU-D7EIS4I-J2Q3EQX"
 INVITE = f"tvjoin:example-tailnet.ts.net:{STID}:tskey-auth-x-y\n"
+# An invitation with the member's login in it, which tv join then uses.
+INVITE_SAM = f"tvjoin:example-tailnet.ts.net:{STID}:sam:tskey-auth-x-y\n"
 TV = ROOT / "tv"
 FAKE = Path(__file__).resolve().parent / "fakeruntime"
 # dash, Debian's sh and the strictest about POSIX, when this machine has it.
@@ -605,6 +607,9 @@ def test_joining_again_keeps_the_folder_it_has(box):
     f"tvjoin:$(id).ts.net:{STID}:tskey-auth-x-y",
     "tvjoin:example-tailnet.ts.net:NOT-A-DEVICE-ID:tskey-auth-x-y",
     f"tvjoin:example-tailnet.ts.net:{STID}:tskey-auth-x y",
+    f"tvjoin:example-tailnet.ts.net:{STID}:Sam Smith:tskey-auth-x-y",
+    f"tvjoin:example-tailnet.ts.net:{STID}:$(id):tskey-auth-x-y",
+    f"tvjoin:example-tailnet.ts.net:{STID}:sam:extra:tskey-auth-x-y",
 ])
 def test_join_refuses_an_invitation_that_isnt_well_formed(box, bad):
     # Its parts end up in a file the box sources as shell.
@@ -969,3 +974,40 @@ def test_doctor_in_words_reads_the_boxs_compact_json(box):
     compact = json.dumps(json.loads(BOX_DOCTOR), separators=(",", ":"))
     r = box.tv("doctor", FAKE_STATE="running", FAKE_EXEC_OUT=compact)
     assert [line.split()[1] for line in r.stdout.splitlines()] == ALL_IDS
+
+
+# --- the login in the invitation ---------------------------------------------
+
+def test_join_takes_the_login_from_the_invitation(box):
+    box.runtimes("docker")
+    r = box.tv("join", input=INVITE_SAM)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "LOGIN='sam'" in box.config.read_text()
+    assert box.call("exec")[-2:] == ["tvbox-join", "sam"]
+
+
+def test_join_from_clipboard_takes_the_login_from_the_invitation(box):
+    box.runtimes("docker")
+    clipboard(box, [INVITE_SAM.strip()])
+    r = box.tv("join", "--name", "Sam", "--email", "s@example.org",
+               "--from-clipboard", TV_POLL="0")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert box.call("exec")[-2:] == ["tvbox-join", "sam"]
+
+
+def test_join_refuses_a_login_the_invitation_isnt_for(box):
+    box.runtimes("docker")
+    r = box.tv("join", "--login", "bob", input=INVITE_SAM)
+    assert r.returncode == 2
+    assert "sam" in r.stdout + r.stderr
+    assert not [c for c in box.calls() if len(c) > 1 and c[1] == "run"]
+
+
+def test_join_with_an_old_invitation_and_no_login_or_terminal_gives_up(box):
+    # An invitation from before logins were in it, from the Mac app (which
+    # no longer asks for one): ask Danny for a new one.
+    box.runtimes("docker")
+    r = box.tv("join", input=INVITE)
+    assert r.returncode == 2
+    assert "login" in (r.stdout + r.stderr).lower()
+    assert not [c for c in box.calls() if len(c) > 1 and c[1] == "run"]

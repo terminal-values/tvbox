@@ -56,6 +56,6 @@ else
     if "$BIN/tv" folder >/dev/null 2>&1; then
         echo "This computer has already joined TV: $tv status says how the box is."
     else
-        echo "Next: $tv join, with the login name you picked and the invitation Danny sent you."
+        echo "Next: $tv join, with the invitation Danny sent you."
     fi
 fi
