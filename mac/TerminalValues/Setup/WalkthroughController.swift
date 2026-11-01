@@ -9,7 +9,6 @@ import Observation
 final class WalkthroughController {
     let model: AppModel
     var step: SetupStep = .welcome
-    var login = ""
     var name = ""
     var email = ""
     var identity: Identity?
@@ -87,17 +86,18 @@ final class WalkthroughController {
     }
 
     // 3. About you
-    var aboutYouReady: Bool { SetupStep.isGoodLogin(login) && !name.isEmpty && email.contains("@") }
+    var aboutYouReady: Bool { !name.isEmpty && email.contains("@") }
 
     // 4. The invitation: tv watches the clipboard (a minute at a time, since
-    // it has no terminal here) until the member copies it.
+    // it has no terminal here) until the member copies it. The login is the
+    // one in the invitation.
     func watchForInvitation() async {
         working = "Watching the clipboard…"
         defer { working = nil }
         while step == .invitation && !Task.isCancelled {
             let r: TVResult
             do {
-                var args = ["join", "--from-clipboard", "--login", login, "--name", name, "--email", email]
+                var args = ["join", "--from-clipboard", "--name", name, "--email", email]
                 // A release joins with the box it was built with.
                 if let pin = model.pinned { args += ["--image", pin.digest, "--revision", pin.revision] }
                 r = try await model.tv.run(args, timeout: .seconds(600))

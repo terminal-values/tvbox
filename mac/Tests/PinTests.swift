@@ -31,9 +31,9 @@ import Testing
         let model = AppModel(tv: fake.tv)
         model.pinned = pin
         let walk = WalkthroughController(model: model, defaults: UserDefaults(suiteName: "tv-tests-\(UUID().uuidString)")!)
-        walk.login = "sam"; walk.name = "Sam"; walk.email = "s@example.org"
+        walk.name = "Sam"; walk.email = "s@example.org"
         walk.go(.invitation)
         await walk.watchForInvitation()
-        #expect(fake.calls.contains("join --from-clipboard --login sam --name Sam --email s@example.org --image sha256:x --revision abc"))
+        #expect(fake.calls.contains("join --from-clipboard --name Sam --email s@example.org --image sha256:x --revision abc"))
     }
 }
