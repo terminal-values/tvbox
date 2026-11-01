@@ -2,7 +2,8 @@
 # Stands in for tv in the app's tests. Logs each call's arguments to
 # $FAKETV_DIR/calls.log, then answers SUBCOMMAND from $FAKETV_DIR/SUBCOMMAND.N.out
 # for its Nth call if there is one, else SUBCOMMAND.out (and exits with
-# SUBCOMMAND.exit, default 0). FAKETV_SLEEP=n sleeps first; FAKETV_JUNK=1
+# SUBCOMMAND.N.exit or SUBCOMMAND.exit, default 0; SUBCOMMAND.N.err or
+# SUBCOMMAND.err goes to stderr). FAKETV_SLEEP=n sleeps first; FAKETV_JUNK=1
 # prints something that isn't JSON.
 d=${FAKETV_DIR:?FAKETV_DIR is not set}
 echo "$*${TV_PINNED_REVISION:+ [pinned $TV_PINNED_REVISION]}" >> "$d/calls.log"
@@ -13,5 +14,8 @@ cmd=${1:-help}
 n=$(grep -c "^$cmd\( \|$\)" "$d/calls.log")
 if [ -f "$d/$cmd.$n.out" ]; then cat "$d/$cmd.$n.out"
 elif [ -f "$d/$cmd.out" ]; then cat "$d/$cmd.out"; fi
+if [ -f "$d/$cmd.$n.err" ]; then cat "$d/$cmd.$n.err" >&2
+elif [ -f "$d/$cmd.err" ]; then cat "$d/$cmd.err" >&2; fi
+[ -f "$d/$cmd.$n.exit" ] && exit "$(cat "$d/$cmd.$n.exit")"
 [ -f "$d/$cmd.exit" ] && exit "$(cat "$d/$cmd.exit")"
 exit 0

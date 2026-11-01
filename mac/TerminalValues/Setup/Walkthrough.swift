@@ -19,6 +19,12 @@ enum SetupStep: Int, CaseIterable, Sendable, Comparable {
         case .done: "Done"
         }
     }
+
+    /// The same rule tv join applies: short, lowercase, starting with a letter.
+    /// Only for an older invitation, without a login in it (until 2026-11-08).
+    static func isGoodLogin(_ login: String) -> Bool {
+        login.range(of: "^[a-z][a-z0-9-]{0,31}$", options: .regularExpression) != nil
+    }
 }
 
 /// Where the walkthrough should be, from what tv says about this computer

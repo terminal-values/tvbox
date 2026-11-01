@@ -49,6 +49,12 @@ import Testing
                            firstCatchUpDone: false, welcomeSeen: true) == .waiting)
     }
 
+    @Test func loginNamesAreCheckedAsTvChecksThem() {
+        #expect(SetupStep.isGoodLogin("sam") && SetupStep.isGoodLogin("sam-2"))
+        #expect(!SetupStep.isGoodLogin("Sam") && !SetupStep.isGoodLogin("2sam") && !SetupStep.isGoodLogin("sam smith")
+                && !SetupStep.isGoodLogin(""))
+    }
+
     @MainActor @Test func aboutYouAsksOnlyForNameAndEmail() {
         // The login comes in the invitation, so it isn't asked for.
         let walk = WalkthroughController(model: AppModel(tv: TV(executable: URL(fileURLWithPath: "/bin/false"))),
