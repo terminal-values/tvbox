@@ -45,11 +45,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         // The unit tests run inside the app: never touch the real box then.
         if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil { return }
+        // Only one copy runs: give way to a newer one already running, and
+        // show its window instead.
+        let others = otherCopies()
+        if let keeper = copyToStepAsideFor(among: others), let url = keeper.bundleURL {
+            quitting = true
+            NSWorkspace.shared.openApplication(at: url, configuration: .init()) { _, _ in
+                DispatchQueue.main.async { NSApplication.shared.terminate(nil) }
+            }
+            return
+        }
+        listenForStepAside()
         moveIn()
         model.pinned = BoxImage.read()
         let atLogin = Self.launchedAtLogin()
         if updatesOn { updater.startUpdater() }
         Task {
+            // Older copies quit first, leaving the box running for this one.
+            await takeOver(from: others)
             await model.launch(atLogin: atLogin)
             // After an app update, the box follows to the image this release pins.
             _ = await moveBoxIfNeeded(model: model, pinned: model.pinned)
@@ -65,6 +78,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
         model.wantsWindow = true
         return false
+    }
+
+    /// A newer copy has opened: quit at once, without stopping the box or
+    /// asking, since the newer copy takes the box over.
+    private func listenForStepAside() {
+        let me = Int(ProcessInfo.processInfo.processIdentifier)
+        DistributedNotificationCenter.default().addObserver(forName: stepAsideNotice, object: nil, queue: .main) { note in
+            guard note.userInfo?["pid"] as? Int != me else { return }
+            MainActor.assumeIsolated {
+                self.quitting = true
+                NSApplication.shared.terminate(nil)
+            }
+        }
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
