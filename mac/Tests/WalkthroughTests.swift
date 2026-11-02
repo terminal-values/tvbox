@@ -128,6 +128,31 @@ import Testing
         await model.refresh()
         #expect(!walk.shouldShow)
     }
+
+    final class Seen: @unchecked Sendable {
+        private let lock = NSLock()
+        private var seen = false
+        func set() { lock.withLock { seen = true } }
+        var value: Bool { lock.withLock { seen } }
+    }
+
+    // Issue #2: on the last page, Finish did nothing. By then the computer is
+    // joined, so finishing changed only a UserDefaults flag, which SwiftUI
+    // doesn't watch: the window never knew to leave the walkthrough.
+    @MainActor @Test func finishingIsSeenByTheWindow() async throws {
+        let fake = try FakeTV(answers: ["check": "running\n", "status": Fixture.statusRunning])
+        let model = AppModel(tv: fake.tv)
+        let d = Self.scratchDefaults()
+        d.set(true, forKey: "walkthroughStarted")
+        let walk = WalkthroughController(model: model, defaults: d)
+        await model.refresh()
+        #expect(walk.shouldShow)
+        let seen = Seen()
+        withObservationTracking { _ = walk.shouldShow } onChange: { seen.set() }
+        walk.finish()
+        #expect(seen.value)
+        #expect(!walk.shouldShow)
+    }
 }
 
 

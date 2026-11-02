@@ -17,10 +17,15 @@ final class WalkthroughController {
     /// The first catch-up failed: the Filling step offers Try Again.
     var fillFailed = false
     private let defaults: UserDefaults
+    /// Kept here as well as in UserDefaults, which SwiftUI doesn't watch: by
+    /// the last step the computer is joined, so finishing changes nothing
+    /// else the window can see (issue #2).
+    private(set) var finished: Bool
 
     init(model: AppModel, defaults: UserDefaults = .standard) {
         self.model = model
         self.defaults = defaults
+        finished = defaults.bool(forKey: "walkthroughFinished")
     }
 
     private func flag(_ key: String) -> Bool { defaults.bool(forKey: key) }
@@ -35,7 +40,7 @@ final class WalkthroughController {
     /// Until tv has said where things stand, it doesn't show.
     var shouldShow: Bool {
         guard model.status != nil else { return false }
-        return !model.isSetUp || (flag("walkthroughStarted") && !flag("walkthroughFinished"))
+        return !model.isSetUp || (flag("walkthroughStarted") && !finished)
     }
 
     func resume() async {
@@ -45,6 +50,7 @@ final class WalkthroughController {
             // A computer that has left (tv uninstall, a new join) starts afresh:
             // its new key is a new key to save.
             for k in ["keySaved", "firstCatchUpDone", "walkthroughFinished", "keySkipped"] { set(k, false) }
+            finished = false
         }
         model.keyNotSaved = flag("keySkipped") && !keySaved
         step = resumeStep(check: model.check ?? .noRuntime, status: model.status, keySaved: keySaved,
@@ -194,6 +200,7 @@ final class WalkthroughController {
     // 9. Done
     func finish() {
         set("walkthroughFinished")
+        finished = true
         if TutorialProgress.enabled { model.tutorialRequested = true }
     }
 }
