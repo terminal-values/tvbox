@@ -2,18 +2,21 @@ import SwiftUI
 
 struct DoneStep: View {
     @Bindable var walk: WalkthroughController
+
+    static let youreIn = "You're in. The box keeps your TV folder in step with everyone else's while this app runs."
+    static let next = "Next, to learn how it all works: drag TUTORIAL.md from your TV folder into your agent (Code in the Claude app, or Codex), and ask it to teach you the Terminal Values setup."
+
     var body: some View {
-        Text("You're in. Your TV folder is in your Documents, and the box keeps it in step with everyone else's while this app runs.")
+        Text(Self.youreIn)
             .fixedSize(horizontal: false, vertical: true)
-        if TutorialProgress.enabled {
-            Text("Next, a short tour: four things to try, a few minutes each.")
-        }
+        Text(Self.next)
+            .fixedSize(horizontal: false, vertical: true)
         HStack {
             Button("Open TV Folder") {
                 if let f = walk.model.status?.folder { NSWorkspace.shared.open(URL(fileURLWithPath: f)) }
             }
             Spacer()
-            Button(TutorialProgress.enabled ? "Start the Tour" : "Finish") { walk.finish() }
+            Button("Finish") { walk.finish() }
                 .keyboardShortcut(.defaultAction)
         }
     }

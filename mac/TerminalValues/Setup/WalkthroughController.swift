@@ -201,6 +201,5 @@ final class WalkthroughController {
     func finish() {
         set("walkthroughFinished")
         finished = true
-        if TutorialProgress.enabled { model.tutorialRequested = true }
     }
 }

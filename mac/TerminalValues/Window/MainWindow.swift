@@ -40,10 +40,6 @@ struct MainWindow: View {
                         Spacer()
                         Button("Open Pages") { Task { _ = try? await model.tv.run(["pages"]) } }
                             .disabled(!model.isRunning)
-                        if TutorialProgress.enabled {
-                            Spacer()
-                            Button("Tutorial") { openWindow(id: "tutorial") }
-                        }
                     }
                 }
                 Section("Terminal") {
