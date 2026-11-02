@@ -59,6 +59,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !atLogin { model.wantsWindow = true }
     }
 
+    /// Opened again while it runs (from Spotlight, Finder or Launchpad):
+    /// macOS sends a reopen, not a launch, so bring the window forward,
+    /// even if it's open behind other windows. False, since that's done here.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        model.wantsWindow = true
+        return false
+    }
+
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         if quitting { return .terminateNow }
         if model.quitRequested(terminalBusy: terminal.isBusy) == .ask {
