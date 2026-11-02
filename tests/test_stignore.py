@@ -19,5 +19,5 @@ def test_agent_files_are_ignored_everywhere_before_the_data_dirs_are_let_in():
 
 def test_only_tvs_data_dirs_are_let_in():
     assert [line for line in LINES if line.startswith("!")] == \
-        ["!/doc", "!/www", "!/ledger", "!/entity", "!/site"]
+        ["!/doc", "!/www", "!/ledger", "!/entity", "!/site", "!/users"]
     assert LINES[-1] == "*"

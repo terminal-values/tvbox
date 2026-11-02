@@ -25,4 +25,5 @@ __pycache__
 !/ledger
 !/entity
 !/site
+!/users
 *
