@@ -1009,6 +1009,5 @@ def test_join_with_an_old_invitation_and_no_login_or_terminal_gives_up(box):
     box.runtimes("docker")
     r = box.tv("join", input=INVITE)
     assert r.returncode == 2
-    # The Mac app looks for these words, and asks for the login.
-    assert "has no login in it" in r.stderr
+    assert "login" in (r.stdout + r.stderr).lower()
     assert not [c for c in box.calls() if len(c) > 1 and c[1] == "run"]

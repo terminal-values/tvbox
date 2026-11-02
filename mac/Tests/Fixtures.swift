@@ -31,12 +31,10 @@ struct FakeTV {
     let dir: URL
     let tv: TerminalValues.TV
 
-    init(answers: [String: String] = [:], exits: [String: Int32] = [:], errors: [String: String] = [:],
-         env: [String: String] = [:]) throws {
+    init(answers: [String: String] = [:], exits: [String: Int32] = [:], env: [String: String] = [:]) throws {
         dir = FileManager.default.temporaryDirectory.appendingPathComponent("faketv-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         for (cmd, out) in answers { try out.write(to: dir.appendingPathComponent("\(cmd).out"), atomically: true, encoding: .utf8) }
-        for (cmd, err) in errors { try err.write(to: dir.appendingPathComponent("\(cmd).err"), atomically: true, encoding: .utf8) }
         for (cmd, code) in exits { try "\(code)".write(to: dir.appendingPathComponent("\(cmd).exit"), atomically: true, encoding: .utf8) }
         let script = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("faketv")
         tv = TerminalValues.TV(executable: script, environment: ["FAKETV_DIR": dir.path].merging(env) { $1 })

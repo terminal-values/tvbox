@@ -10,10 +10,6 @@ final class WalkthroughController {
     let model: AppModel
     var step: SetupStep = .welcome
     var name = ""
-    /// An older invitation has no login in it, so the member types the one
-    /// they agreed with Danny. Remove once those have expired (2026-11-08).
-    var needsLogin = false
-    var login = ""
     var email = ""
     var identity: Identity?
     var message: String?
@@ -102,7 +98,6 @@ final class WalkthroughController {
             let r: TVResult
             do {
                 var args = ["join", "--from-clipboard", "--name", name, "--email", email]
-                if needsLogin { args += ["--login", login] }
                 // A release joins with the box it was built with.
                 if let pin = model.pinned { args += ["--image", pin.digest, "--revision", pin.revision] }
                 r = try await model.tv.run(args, timeout: .seconds(600))
@@ -114,10 +109,6 @@ final class WalkthroughController {
                 await model.refresh()
                 await loadIdentity()
                 go(.tellDanny)
-                return
-            }
-            if r.stderr.contains("has no login in it") {
-                needsLogin = true  // the invitation stays on the clipboard for the next try
                 return
             }
             if !r.stderr.contains("no invitation on the clipboard") {
