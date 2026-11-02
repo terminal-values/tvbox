@@ -13,9 +13,8 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 STID = "MVOEDBP-QTCGNI7-Q6ZZW22-HCGLNE5-5EQZ4NS-5USUULU-D7EIS4I-J2Q3EQX"
-INVITE = f"tvjoin:example-tailnet.ts.net:{STID}:tskey-auth-x-y\n"
-# An invitation with the member's login in it, which tv join then uses.
-INVITE_SAM = f"tvjoin:example-tailnet.ts.net:{STID}:sam:tskey-auth-x-y\n"
+# An invitation for the login sam, which tv join then uses.
+INVITE = f"tvjoin:example-tailnet.ts.net:{STID}:sam:tskey-auth-x-y\n"
 TV = ROOT / "tv"
 FAKE = Path(__file__).resolve().parent / "fakeruntime"
 # dash, Debian's sh and the strictest about POSIX, when this machine has it.
@@ -185,7 +184,7 @@ def test_join_refuses_foreign_folder(box):
     folder = box.home / "stuff"
     folder.mkdir()
     (folder / "notes.txt").write_text("mine")
-    r = box.tv("join", "--login", "sam", "--folder", str(folder), input=INVITE)
+    r = box.tv("join", "--folder", str(folder), input=INVITE)
     assert r.returncode == 2
     assert "--adopt" in r.stdout + r.stderr
     assert not [c for c in box.calls() if c[1] == "run"]
@@ -196,7 +195,7 @@ def test_join_adopts_when_asked(box):
     folder = box.home / "stuff"
     folder.mkdir()
     (folder / "notes.txt").write_text("mine")
-    r = box.tv("join", "--login", "sam", "--folder", str(folder), "--adopt",
+    r = box.tv("join", "--folder", str(folder), "--adopt",
                input=INVITE)
     assert r.returncode == 0, r.stdout + r.stderr
     assert f"{folder}:/home/tv/terminalvalues" in box.call("run")
@@ -204,7 +203,7 @@ def test_join_adopts_when_asked(box):
 
 def test_join_makes_a_missing_folder_and_writes_config(box):
     box.runtimes("docker")
-    r = box.tv("join", "--login", "sam", input=INVITE)
+    r = box.tv("join", input=INVITE)
     assert r.returncode == 0, r.stdout + r.stderr
     assert (box.home / "terminalvalues").is_dir()
     text = box.config.read_text()
@@ -214,13 +213,6 @@ def test_join_makes_a_missing_folder_and_writes_config(box):
     assert "TVHOME_HOST=tvhome.example-tailnet.ts.net" in box.call("run")
     ex = box.call("exec")
     assert ex[-2:] == ["tvbox-join", "sam"] and "-i" in ex
-
-
-def test_join_checks_the_login(box):
-    box.runtimes("docker")
-    r = box.tv("join", "--login", "Sam Smith", input=INVITE)
-    assert r.returncode == 2
-    assert not box.calls() or not [c for c in box.calls() if c[1] == "run"]
 
 
 def test_export_key_refuses_a_terminal(box):
@@ -273,7 +265,7 @@ def test_update_when_current(box):
 @pytest.mark.parametrize("bad", ["tskey-auth-x-y\n", "tvjoin:example-tailnet.ts.net:tskey-auth-x\n", "\n"])
 def test_join_wants_the_whole_invitation(box, bad):
     box.runtimes("docker")
-    r = box.tv("join", "--login", "sam", input=bad)
+    r = box.tv("join", input=bad)
     assert r.returncode == 2
     assert "invitation" in r.stdout + r.stderr
     assert not [c for c in box.calls() if c[1] == "run"]
@@ -289,14 +281,14 @@ def test_run_runs_any_command_in_the_box(box):
 def test_join_takes_an_invitation_without_a_final_newline(box):
     """pbpaste | tv join gives no newline at the end."""
     box.runtimes("docker")
-    r = box.tv("join", "--login", "sam", input=INVITE.rstrip("\n"))
+    r = box.tv("join", input=INVITE.rstrip("\n"))
     assert r.returncode == 0, r.stdout + r.stderr
     assert "TVHOME_HOST=tvhome.example-tailnet.ts.net" in box.call("run")
 
 
 def test_join_asks_for_name_and_email_and_keeps_them(box):
     box.runtimes("docker")
-    r = box.tv("join", "--login", "sam", "--name", "Sam Smith", "--email", "sam@example.org",
+    r = box.tv("join", "--name", "Sam Smith", "--email", "sam@example.org",
                input=INVITE)
     assert r.returncode == 0, r.stdout + r.stderr
     text = box.config.read_text()
@@ -355,7 +347,7 @@ sed -n "$((n + 1))p" {clip} | tr -d '\\n'
 def test_join_waits_for_the_invitation_on_the_clipboard(box):
     box.runtimes("docker")
     clipboard(box, ["some other text", "tvjoin:not-a-whole-one", INVITE.strip()])
-    r = box.tv("join", "--login", "sam", "--name", "Sam", "--email", "s@example.org",
+    r = box.tv("join", "--name", "Sam", "--email", "s@example.org",
                "--from-clipboard", TV_POLL="0")
     assert r.returncode == 0, r.stdout + r.stderr
     assert "copy the invitation" in r.stdout
@@ -366,7 +358,7 @@ def test_join_waits_for_the_invitation_on_the_clipboard(box):
 def test_join_from_clipboard_never_prints_the_key(box):
     box.runtimes("docker")
     clipboard(box, [INVITE.strip()])
-    r = box.tv("join", "--login", "sam", "--name", "Sam", "--email", "s@example.org",
+    r = box.tv("join", "--name", "Sam", "--email", "s@example.org",
                "--from-clipboard", TV_POLL="0")
     assert "tskey-auth-x-y" not in r.stdout + r.stderr
 
@@ -391,7 +383,7 @@ def busy_ports(box, *ports):
 def test_join_picks_a_free_port_and_keeps_it(box):
     box.runtimes("docker")
     busy_ports(box, 8484, 8485)
-    r = box.tv("join", "--login", "sam", input=INVITE)
+    r = box.tv("join", input=INVITE)
     assert r.returncode == 0, r.stdout + r.stderr
     assert "127.0.0.1:8486:8484" in box.call("run")
     assert "PORT='8486'" in box.config.read_text()
@@ -417,7 +409,7 @@ def test_a_config_without_port_uses_8484(box):
 
 def test_a_failed_join_writes_no_config_and_says_to_retry(box):
     box.runtimes("docker")
-    r = box.tv("join", "--login", "sam", input=INVITE, FAKE_RUN_FAILS="1")
+    r = box.tv("join", input=INVITE, FAKE_RUN_FAILS="1")
     assert r.returncode != 0
     assert not box.config.exists()
     assert "tv join again" in r.stdout + r.stderr
@@ -428,7 +420,7 @@ def test_join_takes_back_a_folder_only_syncthing_has_touched(box):
     folder = box.home / "terminalvalues"
     (folder / ".stfolder").mkdir(parents=True)
     (folder / ".stignore").write_text("x\n")
-    r = box.tv("join", "--login", "sam", input=INVITE)
+    r = box.tv("join", input=INVITE)
     assert r.returncode == 0, r.stdout + r.stderr
 
 
@@ -477,7 +469,7 @@ def fake_tool(box, name, script):
 def test_join_on_a_mac_puts_the_folder_in_documents(box):
     box.runtimes("container")
     fake_tool(box, "defaults", "echo 0")
-    r = box.tv("join", "--login", "sam", input=INVITE, FAKE_UNAME="Darwin")
+    r = box.tv("join", input=INVITE, FAKE_UNAME="Darwin")
     assert r.returncode == 0, r.stdout + r.stderr
     assert (box.home / "Documents" / "terminalvalues").is_dir()
     assert f"FOLDER='{box.home}/Documents/terminalvalues'" in box.config.read_text()
@@ -488,7 +480,7 @@ def test_join_on_a_mac_puts_the_folder_in_documents(box):
 def test_join_keeps_out_of_documents_icloud_syncs(box):
     box.runtimes("container")
     fake_tool(box, "defaults", '[ "$3" = FXICloudDriveDocuments ] && echo 1')
-    r = box.tv("join", "--login", "sam", input=INVITE, FAKE_UNAME="Darwin")
+    r = box.tv("join", input=INVITE, FAKE_UNAME="Darwin")
     assert r.returncode == 0, r.stdout + r.stderr
     assert f"FOLDER='{box.home}/terminalvalues'" in box.config.read_text()
     assert "iCloud" in r.stdout
@@ -499,7 +491,7 @@ def test_join_on_linux_uses_the_xdg_documents_dir(box):
     docs = box.home / "Dokumente"
     docs.mkdir()
     fake_tool(box, "xdg-user-dir", f'[ "$1" = DOCUMENTS ] && echo {docs}')
-    r = box.tv("join", "--login", "sam", input=INVITE)
+    r = box.tv("join", input=INVITE)
     assert r.returncode == 0, r.stdout + r.stderr
     assert f"FOLDER='{docs}/terminalvalues'" in box.config.read_text()
 
@@ -507,7 +499,7 @@ def test_join_on_linux_uses_the_xdg_documents_dir(box):
 def test_join_on_linux_without_documents_uses_home(box):
     box.runtimes("podman")
     fake_tool(box, "xdg-user-dir", f"echo {box.home}")
-    r = box.tv("join", "--login", "sam", input=INVITE)
+    r = box.tv("join", input=INVITE)
     assert f"FOLDER='{box.home}/terminalvalues'" in box.config.read_text()
 
 
@@ -576,7 +568,7 @@ def test_join_pins_the_newest_published_box(box, unbuilt, digest, revision):
     # still building left the box unpinned, with no version recorded.
     box.runtimes("podman")
     (box.bin / "curl").symlink_to(FAKECURL)
-    r = box.tv("join", "--login", "sam", input=INVITE, FAKE_UNBUILT=unbuilt)
+    r = box.tv("join", input=INVITE, FAKE_UNBUILT=unbuilt)
     assert r.returncode == 0, r.stdout + r.stderr
     text = box.config.read_text()
     assert f"IMAGE='ghcr.io/terminal-values/tvbox@sha256:{digest}'" in text
@@ -593,7 +585,7 @@ def test_joining_again_keeps_the_folder_it_has(box):
     # No .git yet: a member who hasn't caught up. It's still TV's folder.
     (box.home / "Documents").mkdir()
     box.configure(FOLDER=str(elsewhere))
-    r = box.tv("join", "--login", "sam", input=INVITE)
+    r = box.tv("join", input=INVITE)
     assert r.returncode == 0, r.stdout + r.stderr
     assert f"FOLDER='{elsewhere}'" in box.config.read_text()
     assert f"{elsewhere}:/home/tv/terminalvalues" in box.call("run")
@@ -603,10 +595,11 @@ def test_joining_again_keeps_the_folder_it_has(box):
 # --- from the final review, 2026-10-29 --------------------------------------
 
 @pytest.mark.parametrize("bad", [
-    f"tvjoin:tail;net.ts.net:{STID}:tskey-auth-x-y",
-    f"tvjoin:$(id).ts.net:{STID}:tskey-auth-x-y",
-    "tvjoin:example-tailnet.ts.net:NOT-A-DEVICE-ID:tskey-auth-x-y",
-    f"tvjoin:example-tailnet.ts.net:{STID}:tskey-auth-x y",
+    f"tvjoin:tail;net.ts.net:{STID}:sam:tskey-auth-x-y",
+    f"tvjoin:$(id).ts.net:{STID}:sam:tskey-auth-x-y",
+    "tvjoin:example-tailnet.ts.net:NOT-A-DEVICE-ID:sam:tskey-auth-x-y",
+    f"tvjoin:example-tailnet.ts.net:{STID}:sam:tskey-auth-x y",
+    f"tvjoin:example-tailnet.ts.net:{STID}:tskey-auth-x-y",  # older, without the login
     f"tvjoin:example-tailnet.ts.net:{STID}:Sam Smith:tskey-auth-x-y",
     f"tvjoin:example-tailnet.ts.net:{STID}:$(id):tskey-auth-x-y",
     f"tvjoin:example-tailnet.ts.net:{STID}:sam:extra:tskey-auth-x-y",
@@ -614,7 +607,7 @@ def test_joining_again_keeps_the_folder_it_has(box):
 def test_join_refuses_an_invitation_that_isnt_well_formed(box, bad):
     # Its parts end up in a file the box sources as shell.
     box.runtimes("docker")
-    r = box.tv("join", "--login", "sam", input=bad + "\n")
+    r = box.tv("join", input=bad + "\n")
     assert r.returncode == 2
     assert not [c for c in box.calls() if len(c) > 1 and c[1] == "run"]
 
@@ -657,7 +650,7 @@ def test_join_from_clipboard_without_a_terminal_gives_up(box):
     # The Mac app has no Ctrl-C: if nothing's been copied, say so, don't hang.
     box.runtimes("docker")
     clipboard(box, ["something else"])
-    r = box.tv("join", "--login", "sam", "--name", "Sam", "--email", "s@example.org",
+    r = box.tv("join", "--name", "Sam", "--email", "s@example.org",
                "--from-clipboard", TV_POLL="0")
     assert r.returncode == 2
     assert "copy" in (r.stdout + r.stderr).lower()
@@ -936,7 +929,7 @@ def test_join_can_be_given_its_image(box):
     # The Mac app joins with the box its release was built with, not main's.
     box.runtimes("container")
     (box.bin / "curl").symlink_to(FAKECURL)
-    r = box.tv("join", "--login", "sam", "--image", "sha256:pinned", "--revision", "c" * 40, input=INVITE)
+    r = box.tv("join", "--image", "sha256:pinned", "--revision", "c" * 40, input=INVITE)
     assert r.returncode == 0, r.stdout + r.stderr
     text = box.config.read_text()
     assert "IMAGE='ghcr.io/terminal-values/tvbox@sha256:pinned'" in text and f"REVISION='{'c' * 40}'" in text
@@ -980,34 +973,14 @@ def test_doctor_in_words_reads_the_boxs_compact_json(box):
 
 def test_join_takes_the_login_from_the_invitation(box):
     box.runtimes("docker")
-    r = box.tv("join", input=INVITE_SAM)
+    r = box.tv("join", input=INVITE.replace(":sam:", ":liz:"))
     assert r.returncode == 0, r.stdout + r.stderr
-    assert "LOGIN='sam'" in box.config.read_text()
-    assert box.call("exec")[-2:] == ["tvbox-join", "sam"]
+    assert "LOGIN='liz'" in box.config.read_text()
+    assert box.call("exec")[-2:] == ["tvbox-join", "liz"]
 
 
-def test_join_from_clipboard_takes_the_login_from_the_invitation(box):
+def test_join_no_longer_takes_a_login(box):
     box.runtimes("docker")
-    clipboard(box, [INVITE_SAM.strip()])
-    r = box.tv("join", "--name", "Sam", "--email", "s@example.org",
-               "--from-clipboard", TV_POLL="0")
-    assert r.returncode == 0, r.stdout + r.stderr
-    assert box.call("exec")[-2:] == ["tvbox-join", "sam"]
-
-
-def test_join_refuses_a_login_the_invitation_isnt_for(box):
-    box.runtimes("docker")
-    r = box.tv("join", "--login", "bob", input=INVITE_SAM)
+    r = box.tv("join", "--login", "sam", input=INVITE)
     assert r.returncode == 2
-    assert "sam" in r.stdout + r.stderr
-    assert not [c for c in box.calls() if len(c) > 1 and c[1] == "run"]
-
-
-def test_join_with_an_old_invitation_and_no_login_or_terminal_gives_up(box):
-    # An invitation from before logins were in it, from the Mac app (which
-    # no longer asks for one): ask Danny for a new one.
-    box.runtimes("docker")
-    r = box.tv("join", input=INVITE)
-    assert r.returncode == 2
-    assert "login" in (r.stdout + r.stderr).lower()
     assert not [c for c in box.calls() if len(c) > 1 and c[1] == "run"]

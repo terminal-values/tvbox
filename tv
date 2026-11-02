@@ -223,32 +223,21 @@ pin_latest() {
 
 # --- commands --------------------------------------------------------------
 
-# parse_invitation TEXT: sets tailnet, tvhome_id, invited (the login it's
-# for) and key; fails if TEXT isn't a whole invitation,
-# tvjoin:TAILNET:TVHOME-SYNCTHING-ID:LOGIN:tskey-... Older ones have no
-# LOGIN, and leave invited empty.
+# parse_invitation TEXT: sets tailnet, tvhome_id, login and key; fails if
+# TEXT isn't a whole invitation, tvjoin:TAILNET:TVHOME-SYNCTHING-ID:LOGIN:tskey-...
 parse_invitation() {
     old_ifs=$IFS; IFS=:
     # shellcheck disable=SC2086
     set -- $1
     IFS=$old_ifs
-    [ "${1:-}" = tvjoin ] || return 1
-    case $# in
-        4) p_login= p_key=$4 ;;
-        5) p_login=$4 p_key=$5 ;;
-        *) return 1 ;;
-    esac
+    [ $# -eq 5 ] && [ "$1" = tvjoin ] || return 1
     # Each part has its own shape, checked strictly: they end up in a file
     # the box reads as shell.
     printf '%s' "$2" | grep -Eqx '[a-z0-9-]+(\.[a-z0-9-]+)+' || return 1
     printf '%s' "$3" | grep -Eqx '([A-Z2-7]{7}-){7}[A-Z2-7]{7}' || return 1
-    [ -z "$p_login" ] || good_login "$p_login" || return 1
-    printf '%s' "$p_key" | grep -Eqx 'tskey-[A-Za-z0-9-]+' || return 1
-    tailnet=$2 tvhome_id=$3 invited=$p_login key=$p_key
-}
-
-good_login() {
-    printf '%s\n' "$1" | grep -Eqx '[a-z][a-z0-9-]{0,31}'
+    printf '%s' "$4" | grep -Eqx '[a-z][a-z0-9-]{0,31}' || return 1
+    printf '%s' "$5" | grep -Eqx 'tskey-[A-Za-z0-9-]+' || return 1
+    tailnet=$2 tvhome_id=$3 login=$4 key=$5
 }
 
 # Wait until the clipboard holds an invitation, so the member copies it from
@@ -270,10 +259,9 @@ invitation_from_clipboard() {
 }
 
 cmd_join() {
-    login= folder= adopt=no name=$NAME email=$EMAIL clip=no image= rev=
+    folder= adopt=no name=$NAME email=$EMAIL clip=no image= rev=
     while [ $# -gt 0 ]; do
         case $1 in
-            --login) login=${2:-}; shift ;;
             --name) name=${2:-}; shift ;;
             --email) email=${2:-}; shift ;;
             --folder) folder=${2:-}; shift ;;
@@ -324,19 +312,7 @@ with --folder, or use it anyway with: tv join --adopt --folder $folder"
     fi
     parse_invitation "$invite" ||
         die 2 "That isn't a whole invitation: it's one line, starting tvjoin:, as Danny sent it."
-    # The login is the one Danny put in the invitation. An older invitation
-    # has none, so it's asked for, at a terminal.
-    if [ -n "$invited" ]; then
-        [ -z "$login" ] || [ "$login" = "$invited" ] ||
-            die 2 "This invitation is for the login $invited, not $login. Run $(me) join without --login."
-        login=$invited
-    elif [ -z "$login" ]; then
-        [ -t 0 ] || die 2 "This invitation has no login in it: ask Danny for a new one."
-        printf 'The login name Danny gave you: '
-        read -r login || [ -n "$login" ] || die 2 "No login name given."
-    fi
-    good_login "$login" ||
-        die 2 "'$login' won't do as a login: short, lowercase letters, digits and dashes, starting with a letter."
+    # The login is the one agreed with Danny, which he put in the invitation.
 
     runtime_up
     mkdir -p "$folder" || die 1 "Couldn't make $folder."
