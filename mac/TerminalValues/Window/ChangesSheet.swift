@@ -9,7 +9,7 @@ struct ChangesSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Code and instructions changed on tvhome").font(.headline)
+            Text("Code and instructions changed on TVhome").font(.headline)
             if let note { Text(note).foregroundStyle(.orange) }
             if let c = shown {
                 ForEach(c.code.incoming) { commit in
@@ -51,7 +51,7 @@ struct ChangesSheet: View {
             shown = try await model.tv.json(Changes.self, ["changes", "--diff"], timeout: .seconds(60))
         } catch {
             shown = nil
-            note = "Couldn't get the changes from tvhome: \(error)"
+            note = "Couldn't get the changes from TVhome: \(error)"
         }
     }
 
@@ -60,7 +60,7 @@ struct ChangesSheet: View {
         switch await model.applyChanges(c) {
         case .applied: dismiss()
         case .tvhomeMoved:
-            note = "tvhome has more since you opened this. Here's the latest; nothing was applied."
+            note = "TVhome has more since you opened this. Here's the latest; nothing was applied."
             await load()
         case .clash(let words), .failed(let words):
             note = words

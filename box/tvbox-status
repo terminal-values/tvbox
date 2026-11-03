@@ -73,23 +73,23 @@ case $tailnet in
 esac
 if [ "$connected" != true ]; then
     if [ "$bad" = 0 ]; then
-        echo "Not connected to tvhome's Syncthing yet. Just after tv start that's normal; if you've only just joined, Danny may not have added this box yet (stage 3)."
+        echo "Not connected to TVhome's Syncthing yet. Just after tv start that's normal; if you've only just joined, Danny may not have added this box yet (stage 3)."
     else
-        echo "Not connected to tvhome's Syncthing yet, so documents aren't syncing."
+        echo "Not connected to TVhome's Syncthing yet, so documents aren't syncing."
     fi
     exit 1
 fi
 if [ "$shared" != true ]; then
-    echo "Connected to tvhome, but it hasn't shared TV's folder with this box yet: ask Danny."
+    echo "Connected to TVhome, but it hasn't shared the TVhome Folder with this box yet: ask Danny."
     exit "$bad"
 fi
 if [ "$need" -gt 0 ]; then
     mb=$(printf '%s' "$need_bytes" | jq -r '(. / 1048576 * 10 | round / 10)')
-    echo "Getting TV's documents from tvhome: $need of $global files to go ($mb MB)."
+    echo "Getting TV's documents from TVhome: $need of $global files to go ($mb MB)."
 fi
-[ "$sending" -gt 0 ] && echo "Sending your changes to tvhome: $sending files to go."
+[ "$sending" -gt 0 ] && echo "Sending your changes to TVhome: $sending files to go."
 if [ "$need" -eq 0 ] && [ "$sending" -eq 0 ]; then
-    if [ "$waiting" = true ]; then echo "Waiting for tvhome's list of TV's documents."
-    else echo "Up to date with tvhome ($global files)."; fi
+    if [ "$waiting" = true ]; then echo "Waiting for TVhome's list of TV's documents."
+    else echo "Up to date with TVhome ($global files)."; fi
 fi
 exit "$bad"

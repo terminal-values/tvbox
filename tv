@@ -136,7 +136,7 @@ default_folder() {
     if [ "$(uname)" = Darwin ]; then
         if [ "$(defaults read com.apple.finder FXICloudDriveDocuments 2>/dev/null)" = 1 ]; then
             folder=$HOME/terminalvalues
-            why="(Not in Documents, because iCloud syncs that, and TV's documents travel only by tvhome.)"
+            why="(Not in Documents, because iCloud syncs that, and TV's documents travel only by TVhome.)"
         else
             folder=$HOME/Documents/terminalvalues
         fi
@@ -295,7 +295,7 @@ cmd_join() {
     if [ -d "$folder" ] && [ -n "$(ls -A "$folder" | grep -vxE '\.stfolder|\.stignore|\.DS_Store')" ] &&
        [ ! -e "$folder/.git" ] && [ "$folder" != "$FOLDER" ] &&
        [ "$adopt" = no ]; then
-        die 2 "$folder already has files in it, and isn't a TV folder. Pick another
+        die 2 "$folder already has files in it, and isn't a TVhome Folder. Pick another
 with --folder, or use it anyway with: tv join --adopt --folder $folder"
     fi
     # The invitation Danny sends: tvjoin:TAILNET:TVHOME-SYNCTHING-ID:LOGIN:KEY.
@@ -332,7 +332,7 @@ with --folder, or use it anyway with: tv join --adopt --folder $folder"
     # Only now: a config is what tells tv (and the installer) this computer
     # has joined.
     write_config
-    say "Your TV folder is $FOLDER.${why:+ $why}"
+    say "Your TVhome Folder is $FOLDER.${why:+ $why}"
     say "(tv folder says where it is; tv move puts it somewhere else.)"
     # The invitation's key is used up now, but don't leave it lying about.
     if [ "$clip" = yes ] || command -v pbcopy >/dev/null 2>&1; then
@@ -350,7 +350,7 @@ cmd_start() {
                 # on another (its storage, and so the key, is kept).
                 "$RT" rm "$BOX" >/dev/null 2>&1
                 create_box || die 1 "The box wouldn't start (see above)."
-                say "Its usual port was taken, so TV's pages are now at http://127.0.0.1:$PORT/ (tv pages opens them)."
+                say "Its usual port was taken, so TVhome Pages are now at http://127.0.0.1:$PORT/ (tv pages opens them)."
             else
                 "$RT" start "$BOX" >/dev/null || die 1 "The box wouldn't start (see above)."
             fi ;;
@@ -553,7 +553,7 @@ cmd_pages() {
     url=http://127.0.0.1:$PORT/$(printf '%s' "${1:-}" | sed 's:^/*::; s/ /%20/g')
     if command -v open >/dev/null 2>&1; then open "$url"
     elif command -v xdg-open >/dev/null 2>&1; then xdg-open "$url"
-    else say "TV's pages: $url"; fi
+    else say "TVhome Pages: $url"; fi
 }
 
 # tv move NEW-FOLDER: put the TV folder somewhere else. The box mounts the
@@ -564,7 +564,7 @@ cmd_move() {
     [ $# -eq 1 ] && [ -n "$1" ] || die 2 "Usage: tv move NEW-FOLDER"
     case $1 in /*) dest=$1 ;; *) dest=$(pwd)/$1 ;; esac
     dest=${dest%/}
-    case $dest/ in "$FOLDER"/*) die 2 "$dest is in the TV folder itself; pick somewhere outside it." ;; esac
+    case $dest/ in "$FOLDER"/*) die 2 "$dest is in the TVhome Folder itself; pick somewhere outside it." ;; esac
     if [ -e "$dest" ]; then
         [ -d "$dest" ] && [ -z "$(ls -A "$dest")" ] ||
             die 2 "$dest already has something in it; pick a new or empty folder."
@@ -581,7 +581,7 @@ cmd_move() {
     if [ "$was" = running ]; then
         create_box || die 1 "The folder moved, but the box wouldn't start (see above). Try tv start."
     fi
-    say "The TV folder is now $FOLDER."
+    say "The TVhome Folder is now $FOLDER."
 }
 
 cmd_import_key() {
@@ -668,7 +668,7 @@ cmd_uninstall() {
     rm -f "$CONFIG" "$HOME/.local/bin/tv"
     app="${TVBOX_SYSTEM_APPS:-/Applications}/Terminal Values.app"
     [ -d "$app" ] && say "Drag $app to the Trash to remove the app too."
-    say "tv is uninstalled.${FOLDER:+ The TV folder, $FOLDER, is still there.}"
+    say "tv is uninstalled.${FOLDER:+ The TVhome Folder, $FOLDER, is still there.}"
 }
 
 # tv update [--yes]: a newer box, showing its commits and asking first.
@@ -783,19 +783,19 @@ tv: Terminal Values' box.
   tv stats         the box's CPU, memory and disk use
   tv catch-up      bring the code and secrets up to date, showing code changes first
   tv changes       what tv catch-up would bring in, as JSON
-  tv push          send your code commits and the secrets to tvhome
-  tv git ...       git, in the TV folder, in the box
+  tv push          send your code commits and the secrets to TVhome
+  tv git ...       git, in the TVhome Folder, in the box
   tv passage ...   TV's shared secrets
-  tv pages [PAGE]  open TV's internal pages (or one, by its path in www/)
-  tv shell         a shell in the box, in the TV folder
-  tv run CMD ...   run any command in the box, in the TV folder
+  tv pages [PAGE]  open TVhome Pages (or one, by its path in www/)
+  tv shell         a shell in the box, in the TVhome Folder
+  tv run CMD ...   run any command in the box, in the TVhome Folder
   tv import-key    bring in your saved age key (tv import-key < file)
   tv export-key F  save a copy of your age key to file F
   tv update        get a newer box, showing what changed first
   tv identity      the three lines Danny needs to let this box in
   tv doctor        a check-up of everything, with fixes
-  tv folder        print where the TV folder is
-  tv move FOLDER   move the TV folder somewhere else
+  tv folder        print where the TVhome Folder is
+  tv move FOLDER   move the TVhome Folder somewhere else
   tv uninstall     remove the box and tv
 EOF
 }

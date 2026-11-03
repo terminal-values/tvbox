@@ -8,16 +8,16 @@ container runtime and this script.
 ```console
 $ tv status
 On TV's tailnet.
-Up to date with tvhome (214 files).
+Up to date with TVhome (214 files).
 $ tv catch-up
-Code and instructions changed on tvhome since you last caught up:
+Code and instructions changed on TVhome since you last caught up:
   1a2b3c4 Sam: Add a receipts importer
  bin/import-receipts | 42 ++++++++++++++++++++++++++
 Apply them? [y/N] y
-Caught up with tvhome (1a2b3c4 Add a receipts importer).
+Caught up with TVhome (1a2b3c4 Add a receipts importer).
 ```
 
-The TV folder stays an ordinary folder (`~/Documents/terminalvalues`) that the member
+The TVhome Folder stays an ordinary folder (`~/Documents/terminalvalues`) that the member
 opens in their own apps and points their agent at. The box mounts it and
 does the syncing, the git and the secrets.
 
@@ -56,24 +56,24 @@ tv status [--json]     on the tailnet? syncing?
 tv stats / identity / changes / doctor   CPU and memory; the lines Danny needs;
                        what catch-up would bring; a check-up (--json for the app)
 tv catch-up            code and secrets up to date, code changes shown first
-tv push                commits and the secrets store to tvhome
+tv push                commits and the secrets store to TVhome
 tv git ... / tv passage ... / tv run CMD ...   in the box, in the folder
-tv pages [PAGE]        TV's internal pages, via 127.0.0.1:8484 (or the next free port)
+tv pages [PAGE]        TVhome Pages, via 127.0.0.1:8484 (or the next free port)
 tv shell               a shell in the box
 tv export-key FILE     save a copy of your age key (readable only by you)
 tv import-key          bring one in (--replace to swap out a new one)
 tv update              a newer box, showing tvbox's commits since yours first
                        (with the Mac app installed, the app updates itself and the box together)
-tv folder / move DIR    where the TV folder is; put it somewhere else
+tv folder / move DIR    where the TVhome Folder is; put it somewhere else
 ```
 
 ## How it works
 
 - Tailscale runs in userspace mode inside the box, logged in with a
   single-use key tagged for that member. No TUN device, no system
-  extension, no Tailscale account. Everything the box says to tvhome goes
+  extension, no Tailscale account. Everything the box says to TVhome goes
   through Tailscale's local SOCKS5 proxy.
-- Syncthing in the box talks only to tvhome, through that proxy: no
+- Syncthing in the box talks only to TVhome, through that proxy: no
   discovery, no relays. It carries TV's documents; git carries code.
 - The box starts as root only long enough to hand its storage (a volume,
   `tv-state`, at `/state`) to your uid, then runs everything as you, so
@@ -87,12 +87,12 @@ tv folder / move DIR    where the TV folder is; put it somewhere else
   itself with Sparkle; each release pins the box image built from the same
   commit, and moves the box to it after updating.
 
-None of this names TV's tailnet or tvhome's address: each member's
+None of this names TV's tailnet or TVhome's address: each member's
 invitation does.
 
 ## Limits
 
-This is built for one small organisation's setup, a tvhome machine on its
+This is built for one small organisation's setup, a TVhome machine on its
 own tailnet, and probably isn't much use as it stands to anyone else.
 Windows isn't supported. On a Mac, Apple's `container` passes on no
 file-change notices, so edits wait for a rescan (every 15 seconds).

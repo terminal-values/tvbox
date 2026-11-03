@@ -22,14 +22,14 @@ struct StatusSection: View {
             LabeledContent("TV's network", value: networkLine)
             LabeledContent("Documents", value: documentsLine)
             if let folder = model.status?.folder {
-                LabeledContent("Folder", value: (folder as NSString).abbreviatingWithTildeInPath)
+                LabeledContent("TVhome Folder", value: (folder as NSString).abbreviatingWithTildeInPath)
             }
         }
     }
 
     private var boxLine: String {
         if let busy = model.busy { return busy }
-        return model.isRunning ? "The box is running" : "The box is stopped"
+        return model.isRunning ? "TV Box running" : "TV Box stopped"
     }
 
     private var networkLine: String {
@@ -44,9 +44,9 @@ struct StatusSection: View {
 
     private var documentsLine: String {
         guard model.isRunning, let sync = model.status?.sync else { return "Not syncing" }
-        if !sync.connected { return "Connecting to tvhome…" }
+        if !sync.connected { return "Connecting to TVhome…" }
         if !sync.shared { return "Waiting for Danny" }
-        if sync.waitingForList { return "Waiting for tvhome's list" }
+        if sync.waitingForList { return "Waiting for TVhome's list" }
         if sync.needFiles > 0 { return "\(sync.needFiles) to get" }
         if sync.sending > 0 { return "Sending \(sync.sending)" }
         return "Up to date · \(sync.files) files"

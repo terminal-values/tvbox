@@ -5,7 +5,7 @@ struct RecentSection: View {
 
     var body: some View {
         if let recent = model.changes?.recent, !recent.isEmpty {
-            Section("Lately on tvhome") {
+            Section("Lately on TVhome") {
                 ForEach(recent.prefix(4)) { c in
                     LabeledContent("\(c.author): \(c.subject)", value: Self.ago(c.when))
                 }

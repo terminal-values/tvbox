@@ -30,15 +30,15 @@ struct MainWindow: View {
                 GaugesSection(model: model)
                 Section {
                     if model.pendingCodeChanges > 0 {
-                        LabeledContent("\(model.pendingCodeChanges) code change\(model.pendingCodeChanges == 1 ? "" : "s") on tvhome") {
+                        LabeledContent("\(model.pendingCodeChanges) code change\(model.pendingCodeChanges == 1 ? "" : "s") on TVhome") {
                             Button("Review & Catch Up…") { reviewing = true }
                                 .buttonStyle(.borderedProminent)
                         }
                     }
                     HStack {
-                        Button("Open Folder") { openFolder() }.disabled(model.status == nil)
+                        Button("Open TVhome Folder") { openFolder() }.disabled(model.status == nil)
                         Spacer()
-                        Button("Open Pages") { Task { _ = try? await model.tv.run(["pages"]) } }
+                        Button("Open TVhome Pages") { Task { _ = try? await model.tv.run(["pages"]) } }
                             .disabled(!model.isRunning)
                     }
                 }

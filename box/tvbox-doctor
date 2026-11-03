@@ -32,18 +32,18 @@ if [ "$tailnet" = on ]; then
     peer=$(tailscale status --json 2>/dev/null |
         jq -c --arg h "${TVHOME_HOST%%.*}" '[.Peer[]? | select(.HostName == $h)][0] // {}')
     if [ -n "$(printf '%s' "$peer" | jq -r '.CurAddr // empty')" ]; then
-        add route ok "A direct connection to tvhome."
+        add route ok "A direct connection to TVhome."
     else
-        add route warning "Reaching tvhome through Tailscale's relay ($(printf '%s' "$peer" | jq -r '.Relay // "?"')): it works, just more slowly. Usually a firewall or a busy network; nothing to fix here."
+        add route warning "Reaching TVhome through Tailscale's relay ($(printf '%s' "$peer" | jq -r '.Relay // "?"')): it works, just more slowly. Usually a firewall or a busy network; nothing to fix here."
     fi
     if within 20 ssh -o BatchMode=yes -o ConnectTimeout=15 tvhome true </dev/null >/dev/null 2>&1; then
-        add tvhome-ssh ok "Can log in to tvhome, so git can reach it."
+        add tvhome-ssh ok "Can log in to TVhome, so git can reach it."
     else
-        add tvhome-ssh problem "Can't log in to tvhome, so tv push and tv catch-up won't work. Ask Danny whether your login there is set up."
+        add tvhome-ssh problem "Can't log in to TVhome, so tv push and tv catch-up won't work. Ask Danny whether your login there is set up."
     fi
     code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 http://127.0.0.1:8484/ 2>/dev/null)
-    if [ "$code" = 200 ]; then add tvhome-pages ok "TV's pages answer through the box."
-    else add tvhome-pages problem "TV's pages don't answer through the box (got ${code:-nothing})."; fi
+    if [ "$code" = 200 ]; then add tvhome-pages ok "TVhome Pages answer through the box."
+    else add tvhome-pages problem "TVhome Pages don't answer through the box (got ${code:-nothing})."; fi
 else
     for id in route tvhome-ssh tvhome-pages; do
         add "$id" warning "Not checked: not on TV's tailnet."
@@ -53,11 +53,11 @@ fi
 connected=$(printf '%s' "$status" | jq -r '.sync.connected // false' 2>/dev/null)
 shared=$(printf '%s' "$status" | jq -r '.sync.shared // false' 2>/dev/null)
 if [ "$connected" != true ]; then
-    add tvhome-sync problem "Syncthing isn't connected to tvhome's, so documents aren't syncing."
+    add tvhome-sync problem "Syncthing isn't connected to TVhome's, so documents aren't syncing."
 elif [ "$shared" != true ]; then
-    add tvhome-sync problem "tvhome hasn't shared TV's folder with this box yet: ask Danny."
+    add tvhome-sync problem "TVhome hasn't shared the TVhome Folder with this box yet: ask Danny."
 else
-    add tvhome-sync ok "Syncing with tvhome."
+    add tvhome-sync ok "Syncing with TVhome."
 fi
 
 key=$(sed -n 's:.*<apikey>\(.*\)</apikey>.*:\1:p' "$ST/config.xml" 2>/dev/null)
@@ -71,8 +71,8 @@ else
     add sync-errors ok "No files stuck."
 fi
 
-if [ -d "$INSIDE" ] && [ -w "$INSIDE" ]; then add folder ok "The TV folder is there, and writable."
-else add folder problem "The box can't write to the TV folder. Restart the box (tv stop, then tv start)." start-box; fi
+if [ -d "$INSIDE" ] && [ -w "$INSIDE" ]; then add folder ok "The TVhome Folder is there, and writable."
+else add folder problem "The box can't write to the TVhome Folder. Restart the box (tv stop, then tv start)." start-box; fi
 
 if cmp -s "$INSIDE/.stignore" "$STIGNORE"; then add stignore ok "The folder's sync rules are TV's."
 else add stignore warning "The folder's .stignore has been changed; the box puts TV's back when it starts (tv stop, then tv start)." start-box; fi

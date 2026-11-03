@@ -60,7 +60,7 @@ DONE_REMOTE = {"completion": 100, "needItems": 0, "needDeletes": 0, "remoteState
 def test_up_to_date_says_so_with_the_count(status):
     r = status(local=DONE_LOCAL, remote=DONE_REMOTE)
     assert r.returncode == 0
-    assert r.stdout == "On TV's tailnet.\nUp to date with tvhome (11 files).\n"
+    assert r.stdout == "On TV's tailnet.\nUp to date with TVhome (11 files).\n"
 
 
 def test_while_starting_says_to_wait(status):
@@ -80,25 +80,25 @@ def test_getting_documents_counts_what_is_left(status):
     r = status(local={**DONE_LOCAL, "state": "syncing", "needFiles": 3, "needBytes": 2202010},
                remote=DONE_REMOTE)
     assert r.returncode == 0
-    assert "Getting TV's documents from tvhome: 3 of 11 files to go (2.1 MB)." in r.stdout
+    assert "Getting TV's documents from TVhome: 3 of 11 files to go (2.1 MB)." in r.stdout
 
 
 def test_sending_changes_counts_what_is_left(status):
     r = status(local=DONE_LOCAL, remote={**DONE_REMOTE, "completion": 80, "needItems": 2})
-    assert "Sending your changes to tvhome: 2 files to go." in r.stdout
+    assert "Sending your changes to TVhome: 2 files to go." in r.stdout
     assert "Up to date" not in r.stdout
 
 
 def test_connected_but_folder_not_shared_yet(status):
     r = status(local={**DONE_LOCAL, "globalFiles": 0}, remote={**DONE_REMOTE, "remoteState": "notSharing"})
     assert "Up to date" not in r.stdout
-    assert "hasn't shared TV's folder" in r.stdout
+    assert "hasn't shared the TVhome Folder" in r.stdout
 
 
 def test_not_connected_on_the_tailnet_mentions_stage_3(status):
     r = status(connected=False)
     assert r.returncode == 1
-    assert "Not connected to tvhome's Syncthing" in r.stdout and "stage 3" in r.stdout
+    assert "Not connected to TVhome's Syncthing" in r.stdout and "stage 3" in r.stdout
 
 
 def test_before_tvhome_has_sent_its_list_it_doesnt_claim_up_to_date(status):
@@ -106,7 +106,7 @@ def test_before_tvhome_has_sent_its_list_it_doesnt_claim_up_to_date(status):
     # (0 files)" before it had heard what tvhome has.
     r = status(local={**DONE_LOCAL, "globalFiles": 0}, remote=DONE_REMOTE)
     assert "Up to date" not in r.stdout
-    assert "Waiting for tvhome's list of TV's documents" in r.stdout
+    assert "Waiting for TVhome's list of TV's documents" in r.stdout
 
 
 def test_a_box_off_the_tailnet_doesnt_trust_a_stale_connection(status):
