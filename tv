@@ -20,7 +20,7 @@ FOLDER= IMAGE= LOGIN= NAME= EMAIL= RUNTIME= REVISION= TAILNET= TVHOME_ID= PORT=
 # shellcheck disable=SC1090
 [ -r "$CONFIG" ] && . "$CONFIG"
 IMAGE=${IMAGE:-$DEFAULT_IMAGE}
-# The pages' port on this computer: 8484, or the next free one.
+# The pages' port on this computer: 8484. Set by hand only when two boxes share a computer; TVhome links need 8484.
 PORT=${PORT:-$INNER_PORT}
 
 say() { printf '%s\n' "$*"; }
@@ -94,11 +94,14 @@ port_busy() {
     else return 1; fi
 }
 
-# Make the box, on a free port. Returns non-zero if the runtime won't.
+port_taken_message() {
+    say "Port $PORT on this computer is taken, and TVhome links need port 8484. It's usually another user's TV box on this computer: stop that one, then try again. To run this box on another port anyway, set PORT='8485' (say) in $CONFIG. TVhome Pages will work, but TVhome links won't open on this computer."
+}
+
+# Make the box, on its port. Returns non-zero if the port is taken or the runtime won't.
 create_box() {
     need_config
-    i=0
-    while port_busy "$PORT" && [ $i -lt 50 ]; do PORT=$((PORT + 1)); i=$((i + 1)); done
+    if port_busy "$PORT"; then port_taken_message >&2; return 1; fi
     [ -r "$CONFIG" ] && write_config
     if [ "$RT" = container ]; then
         container volume inspect "$VOLUME" >/dev/null 2>&1 ||
@@ -345,15 +348,8 @@ cmd_start() {
     case $(box_state) in
         running) say "The box is already running." ; return ;;
         stopped)
-            if port_busy "$PORT"; then
-                # Something else took its port while it was stopped: remake it
-                # on another (its storage, and so the key, is kept).
-                "$RT" rm "$BOX" >/dev/null 2>&1
-                create_box || die 1 "The box wouldn't start (see above)."
-                say "Its usual port was taken, so TVhome Pages are now at http://127.0.0.1:$PORT/ (tv pages opens them)."
-            else
-                "$RT" start "$BOX" >/dev/null || die 1 "The box wouldn't start (see above)."
-            fi ;;
+            port_busy "$PORT" && die 1 "$(port_taken_message)"
+            "$RT" start "$BOX" >/dev/null || die 1 "The box wouldn't start (see above)." ;;
         absent) create_box || die 1 "The box wouldn't start (see above)." ;;
     esac
     say "The box is running; TV's documents sync while it runs. tv stop stops it."
@@ -515,10 +511,12 @@ cmd_doctor() {
     if [ "${free:-0}" -lt 512000 ]; then dadd disk-mac problem "This computer is almost out of space."
     elif [ "${free:-0}" -lt 2097152 ]; then dadd disk-mac warning "This computer is getting low on space."
     else dadd disk-mac ok "This computer has room."; fi
-    if [ "$state" != running ] && port_busy "$PORT"; then
-        dadd port warning "Something else is using port $PORT; the box will take another when it starts."
+    if [ "$PORT" != 8484 ]; then
+        dadd port warning "The box uses port $PORT, not 8484, so TVhome links won't open on this computer. To fix it, stop whatever holds port 8484, set PORT='8484' in $CONFIG, then run tv stop and tv start."
+    elif [ "$state" != running ] && port_busy "$PORT"; then
+        dadd port problem "Something else is using port 8484, so the box can't start. It's usually another user's TV box on this computer."
     else
-        dadd port ok "Port $PORT is the box's."
+        dadd port ok "Port 8484 is the box's."
     fi
     # The Mac app says which box its release was built with; that's the one to have.
     if [ -n "${TV_PINNED_REVISION:-}" ]; then

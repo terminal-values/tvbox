@@ -380,24 +380,48 @@ def busy_ports(box, *ports):
     (box.bin / "nc").chmod(0o755)
 
 
-def test_join_picks_a_free_port_and_keeps_it(box):
+def test_join_refuses_a_taken_port(box):
     box.runtimes("docker")
-    busy_ports(box, 8484, 8485)
+    busy_ports(box, 8484)
     r = box.tv("join", input=INVITE)
-    assert r.returncode == 0, r.stdout + r.stderr
-    assert "127.0.0.1:8486:8484" in box.call("run")
-    assert "PORT='8486'" in box.config.read_text()
+    assert r.returncode != 0
+    out = r.stdout + r.stderr
+    assert "8484" in out and "taken" in out and "PORT=" in out
+    assert not [c for c in box.calls() if len(c) > 1 and c[1] == "run"]
+    assert not box.config.exists()
 
 
-def test_start_moves_a_stopped_box_off_a_taken_port(box):
+def test_start_refuses_a_taken_port_and_keeps_the_box(box):
     box.runtimes("docker")
     box.configure(PORT="8484")
     busy_ports(box, 8484)
     r = box.tv("start", FAKE_STATE="stopped")
+    assert r.returncode != 0 and "taken" in r.stdout + r.stderr
+    assert not [c for c in box.calls() if len(c) > 1 and c[1] in ("rm", "run", "start")]
+    assert "PORT='8484'" in box.config.read_text()
+
+
+def test_a_hand_set_port_still_starts(box):
+    box.runtimes("docker")
+    box.configure(PORT="8485")
+    r = box.tv("start")
     assert r.returncode == 0, r.stdout + r.stderr
     assert "127.0.0.1:8485:8484" in box.call("run")
-    assert "PORT='8485'" in box.config.read_text()
-    assert "8485" in r.stdout
+
+
+def test_doctor_warns_off_8484(box):
+    updatable(box, revision=NEW)
+    box.configure(IMAGE="ghcr.io/terminal-values/tvbox@sha256:abc", REVISION=NEW, PORT="8485")
+    res = doctor_json(box, FAKE_STATE="running", FAKE_EXEC_OUT=BOX_DOCTOR)
+    assert res["port"]["status"] == "warning"
+    assert "8485" in res["port"]["message"] and "PORT='8484'" in res["port"]["message"]
+
+
+def test_doctor_port_taken_while_stopped_is_a_problem(box):
+    updatable(box, revision=NEW)
+    busy_ports(box, 8484)
+    res = doctor_json(box, FAKE_STATE="stopped")
+    assert res["port"]["status"] == "problem" and "another" in res["port"]["message"]
 
 
 def test_a_config_without_port_uses_8484(box):
