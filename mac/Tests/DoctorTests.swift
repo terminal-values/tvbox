@@ -21,6 +21,7 @@ import Testing
         let doctor = Doctor(model: model)
         await doctor.run()
         #expect(doctor.report?.results.first?.fix == .startRuntime)
+        #expect(doctor.report?.results.last?.id == "finder-link")  // the app's own check, after tv's
         await doctor.fix(.startRuntime)
         #expect(fake.calls.contains("runtime-start"))
         #expect(fake.calls.filter { $0 == "doctor --json" }.count == 2)  // and checks again
