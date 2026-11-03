@@ -35,16 +35,18 @@ enum TVLink {
     }
 
     /// Resolves symlinks on both, then defers to link(relative:isDirectory:).
-    /// As in tv link, a file's directory is resolved but not the file itself,
-    /// so a symlinked file links to its own name.
+    /// As tv link does: a directory, or a symlink to one, is resolved in full;
+    /// a file's directory is resolved but not the file itself, so a symlinked
+    /// file links to its own name. realpath(3) keeps the names' bytes as they
+    /// are on disk, as pwd -P does; URL's resolvingSymlinksInPath would
+    /// decompose them to NFD and strip /private.
     static func link(for item: URL, folder: URL) -> Result<String, Refusal> {
-        let isDirectory = (try? item.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory
-            ?? item.hasDirectoryPath
-        let path = isDirectory
-            ? item.resolvingSymlinksInPath().path
-            : item.deletingLastPathComponent().resolvingSymlinksInPath()
-                .appending(path: item.lastPathComponent).path
-        let root = folder.resolvingSymlinksInPath().path
+        var st = stat()
+        let isDirectory = stat(item.path, &st) == 0 && st.st_mode & S_IFMT == S_IFDIR
+        let resolved = isDirectory
+            ? realPath(item.path)
+            : realPath(item.deletingLastPathComponent().path).map { $0 + "/" + item.lastPathComponent }
+        guard let path = resolved, let root = realPath(folder.path) else { return .failure(.outside) }
         let relative: String
         if path == root {
             relative = ""
@@ -54,6 +56,13 @@ enum TVLink {
             return .failure(.outside)
         }
         return link(relative: relative, isDirectory: isDirectory)
+    }
+
+    /// The physical path, symlinks resolved, or nil if it isn't there.
+    private static func realPath(_ path: String) -> String? {
+        guard let resolved = realpath(path, nil) else { return nil }
+        defer { free(resolved) }
+        return String(cString: resolved)
     }
 
     /// tv's link_refusal: git for anything outside the synced directories or
