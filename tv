@@ -546,6 +546,80 @@ cmd_doctor() {
         done
 }
 
+# --- tv link ---------------------------------------------------------------
+
+LINK_BASE=http://box.terminalvalues.org:$INNER_PORT/folder/
+
+# Percent-encode a path for a URL: A-Za-z0-9-._~ and / stay, every other byte
+# of the UTF-8 becomes %XX in capitals. Works on bytes (od), so it needs no
+# locale and no Python.
+urlencode_path() {
+    printf '%s' "$1" | od -An -v -tx1 | awk '
+        BEGIN { for (i = 0; i < 256; i++) hex[sprintf("%02x", i)] = i }
+        { for (i = 1; i <= NF; i++) {
+              n = hex[$i]
+              if ((n >= 48 && n <= 57) || (n >= 65 && n <= 90) || (n >= 97 && n <= 122) ||
+                  n == 45 || n == 46 || n == 95 || n == 126 || n == 47) printf "%c", n
+              else printf "%%%02X", n
+          } }'
+}
+
+# Why a path in the folder has no TVhome link: "git" if it travels by git, not
+# Syncthing (the same names as box/stignore, and anything outside the synced
+# directories), "hidden" if TVhome won't serve it. Prints nothing if it's fine.
+link_refusal() {
+    [ -n "$1" ] || return 0
+    first=${1%%/*}
+    case $first in doc|www|ledger|entity|site|users) ;; *) echo git; return ;; esac
+    hidden=
+    old=$IFS; IFS=/; set -f
+    for part in $1; do
+        lower=$(printf '%s' "$part" | tr 'A-Z' 'a-z')
+        case $lower in
+            claude.md|claude.local.md|agents.md|agent.md|gemini.md|.git|.venv|secrets|__pycache__|.pytest_cache|.ds_store|\
+.claude|.agents|.codex|.cursor|.cursorrules|.windsurfrules|.mcp.json|.envrc|.vscode)
+                IFS=$old; set +f; echo git; return ;;
+            .*) hidden=1 ;;
+        esac
+    done
+    IFS=$old; set +f
+    [ -z "$hidden" ] || echo hidden
+}
+
+# tv link PATH...: print the TVhome link for each file in the folder (and on a
+# Mac, copy them). Needs no running box.
+cmd_link() {
+    need_config
+    [ $# -gt 0 ] || die 2 "Usage: tv link PATH..."
+    root=$(cd "$FOLDER" 2>/dev/null && pwd -P) || die 2 "The TVhome Folder, $FOLDER, isn't there."
+    links=
+    for arg in "$@"; do
+        [ -e "$arg" ] || [ -L "$arg" ] || die 2 "There's no $arg."
+        # A physical path, so .., symlinks and a symlinked folder all agree.
+        if [ -d "$arg" ]; then abs=$(cd "$arg" && pwd -P); isdir=1
+        else
+            abs=$(cd "$(dirname "$arg")" && pwd -P)/$(basename "$arg"); isdir=
+        fi
+        case $abs in
+            "$root") rel= ;;
+            "$root"/*) rel=${abs#"$root"/} ;;
+            *) die 2 "$arg isn't in the TVhome Folder ($FOLDER)." ;;
+        esac
+        case $(link_refusal "$rel") in
+            git) die 2 "$arg travels by git, not Syncthing, so TVhome has no copy and there's no TVhome link for it." ;;
+            hidden) die 2 "$arg is hidden (its name starts with a dot), and TVhome doesn't serve hidden files." ;;
+        esac
+        link=$LINK_BASE$(urlencode_path "$rel")
+        case $link in */) ;; *) [ -z "$isdir" ] || link=$link/ ;; esac
+        links=${links:+$links
+}$link
+    done
+    say "$links"
+    if [ "$(uname)" = Darwin ] && command -v pbcopy >/dev/null 2>&1; then
+        printf '%s' "$links" | pbcopy && say "(Copied to the clipboard.)" >&2
+    fi
+}
+
 cmd_pages() {
     need_box
     url=http://127.0.0.1:$PORT/$(printf '%s' "${1:-}" | sed 's:^/*::; s/ /%20/g')
@@ -785,6 +859,7 @@ tv: Terminal Values' box.
   tv git ...       git, in the TVhome Folder, in the box
   tv passage ...   TV's shared secrets
   tv pages [PAGE]  open TVhome Pages (or one, by its path in www/)
+  tv link PATH     print a TVhome link for a file in the folder (and copy it)
   tv shell         a shell in the box, in the TVhome Folder
   tv run CMD ...   run any command in the box, in the TVhome Folder
   tv import-key    bring in your saved age key (tv import-key < file)
@@ -815,6 +890,7 @@ case $cmd in
     run) need_box; in_box "$@" ;;
     shell) need_box; in_box bash -l ;;
     pages) cmd_pages "$@" ;;
+    link) cmd_link "$@" ;;
     import-key) cmd_import_key "$@" ;;
     export-key) cmd_export_key "$@" ;;
     folder) need_config; say "$FOLDER" ;;
@@ -826,7 +902,7 @@ case $cmd in
     help|-h|--help) usage ;;
     *)  # A near miss gets a suggestion: tv catchup, tv catch_up, tv Status.
         near=$(printf '%s' "$cmd" | tr 'A-Z_' 'a-z-')
-        for c in join start stop status stats identity doctor catch-up changes push git passage run shell pages \
+        for c in join start stop status stats identity doctor catch-up changes push git passage run shell pages link \
                  import-key export-key folder move update uninstall; do
             [ "$(printf '%s' "$c" | tr -d -)" = "$(printf '%s' "$near" | tr -d -)" ] && near=$c && break
             c=

@@ -1,0 +1,14 @@
+{"cases": [
+  {"path": "", "dir": true, "link": "http://box.terminalvalues.org:8484/folder/"},
+  {"path": "doc/minutes/2026-10.md", "dir": false, "link": "http://box.terminalvalues.org:8484/folder/doc/minutes/2026-10.md"},
+  {"path": "ledger", "dir": true, "link": "http://box.terminalvalues.org:8484/folder/ledger/"},
+  {"path": "doc/Board minutes #3 (draft)?.pdf", "dir": false, "link": "http://box.terminalvalues.org:8484/folder/doc/Board%20minutes%20%233%20%28draft%29%3F.pdf"},
+  {"path": "users/sam/100%_café~v2.txt", "dir": false, "link": "http://box.terminalvalues.org:8484/folder/users/sam/100%25_caf%C3%A9~v2.txt"},
+  {"path": "TUTORIAL.md", "refused": "git"},
+  {"path": "src/terminalvalues/private.py", "refused": "git"},
+  {"path": "doc/CLAUDE.md", "refused": "git"},
+  {"path": "doc/Agents.md", "refused": "git"},
+  {"path": "users/sam/secrets/x.txt", "refused": "git"},
+  {"path": "doc/.notes.txt", "refused": "hidden"},
+  {"path": ".stversions/doc/a.txt", "refused": "git"}
+]}

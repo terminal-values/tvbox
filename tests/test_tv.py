@@ -20,12 +20,17 @@ FAKE = Path(__file__).resolve().parent / "fakeruntime"
 # dash, Debian's sh and the strictest about POSIX, when this machine has it.
 SH = shutil.which("dash") or "sh"
 TOOLS = ["sh", "env", "python3", "id", "mkdir", "cat", "sed", "grep", "ls",
-         "uname", "mv", "rm", "rmdir", "tr", "dirname", "head", "chmod", "basename", "awk", "df", "cut", "readlink"]
+         "uname", "mv", "rm", "rmdir", "tr", "dirname", "head", "chmod", "basename", "awk", "df", "cut", "readlink", "od"]
 
 
 @pytest.fixture
 def box(tmp_path):
     return Box(tmp_path)
+
+
+def box_env(box):
+    return {"PATH": str(box.bin), "HOME": str(box.home), "TV_CONFIG": str(box.config),
+            "FAKE_LOG": str(box.log), "SHELL": "/bin/zsh"}
 
 
 class Box:
@@ -62,8 +67,7 @@ class Box:
         self.config.write_text("".join(f"{k}='{v}'\n" for k, v in kw.items()))
 
     def tv(self, *args, input="", **env):
-        e = {"PATH": str(self.bin), "HOME": str(self.home), "TV_CONFIG": str(self.config),
-             "FAKE_LOG": str(self.log), "SHELL": "/bin/zsh"}
+        e = box_env(self)
         e.update(env)
         return subprocess.run([SH, str(TV), *args], input=input, capture_output=True,
                               text=True, env=e)
@@ -1008,3 +1012,77 @@ def test_join_no_longer_takes_a_login(box):
     r = box.tv("join", "--login", "sam", input=INVITE)
     assert r.returncode == 2
     assert not [c for c in box.calls() if len(c) > 1 and c[1] == "run"]
+
+
+# --- tv link ------------------------------------------------------------------
+
+CASES = json.loads((ROOT / "tests" / "link_cases.json").read_text())["cases"]
+
+
+def linkable(box):
+    box.runtimes("docker")
+    box.configure()
+    folder = box.home / "terminalvalues"
+    for c in CASES:
+        p = folder / c["path"]
+        if c.get("dir"):
+            p.mkdir(parents=True, exist_ok=True)
+        else:
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text("x")
+    return folder
+
+
+@pytest.mark.parametrize("case", CASES, ids=lambda c: c["path"] or "(folder)")
+def test_link_cases(box, case):
+    folder = linkable(box)
+    r = box.tv("link", str(folder / case["path"]))
+    if "link" in case:
+        assert r.returncode == 0, r.stderr
+        assert r.stdout == case["link"] + "\n"
+    else:
+        assert r.returncode == 2 and r.stdout == ""
+        assert {"git": "travels by git", "hidden": "is hidden"}[case["refused"]] in r.stderr
+
+
+def test_link_takes_relative_paths_with_dot_dot(box):
+    folder = linkable(box)
+    r = subprocess.run([SH, str(TV), "link", "../doc/minutes/2026-10.md"], cwd=folder / "users",
+                       capture_output=True, text=True, env=box_env(box))
+    assert r.stdout.endswith("/folder/doc/minutes/2026-10.md\n")
+
+
+def test_link_through_a_symlinked_folder(box):
+    folder = linkable(box)
+    (box.home / "tvlink").symlink_to(folder)
+    r = box.tv("link", str(box.home / "tvlink" / "doc" / "minutes" / "2026-10.md"))
+    assert r.returncode == 0 and r.stdout.endswith("/folder/doc/minutes/2026-10.md\n")
+
+
+@pytest.mark.parametrize("where", ["terminalvalues2/doc/a.txt", "elsewhere.txt"])
+def test_link_refuses_outside_the_folder(box, where):
+    linkable(box)
+    p = box.home / where
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text("x")
+    r = box.tv("link", str(p))
+    assert r.returncode == 2 and "isn't in the TVhome Folder" in r.stderr
+
+
+def test_link_refuses_a_missing_file(box):
+    folder = linkable(box)
+    r = box.tv("link", str(folder / "doc" / "nope.txt"))
+    assert r.returncode == 2 and "no " in r.stderr.lower()
+
+
+def test_link_on_a_mac_copies_it(box):
+    folder = linkable(box)
+    fake_tool(box, "pbcopy", f'#!/bin/sh\ncat > {box.tmp}/clip\n')
+    r = box.tv("link", str(folder / "ledger"), FAKE_UNAME="Darwin")
+    assert (box.tmp / "clip").read_text() == "http://box.terminalvalues.org:8484/folder/ledger/"
+    assert "clipboard" in r.stderr and r.stdout.strip().endswith("/ledger/")
+
+
+def test_link_needs_no_box(box):
+    folder = linkable(box)
+    assert box.tv("link", str(folder / "ledger"), FAKE_DOWN="1").returncode == 0
