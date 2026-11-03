@@ -35,6 +35,7 @@ targets:
     platform: macOS
     sources:
       - path: TerminalValues
+      - path: Shared
     dependencies:
       - package: SwiftTerm
       - package: Sparkle
