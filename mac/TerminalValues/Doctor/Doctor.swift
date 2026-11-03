@@ -22,7 +22,7 @@ final class Doctor {
     static func fixTitle(_ fix: DoctorFix) -> String {
         switch fix {
         case .startRuntime: "Start the Runtime"
-        case .startBox: "Start the Box"
+        case .startBox: "Start TV Box"
         case .catchUp: "Review & Catch Up…"
         case .update: "Update…"
         }

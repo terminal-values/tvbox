@@ -1,25 +1,18 @@
 import ServiceManagement
 import SwiftUI
 
-/// The menu under the menu bar icon.
+/// The menu under the menu bar icon: TVhome's pages and folder first, then
+/// this Mac's box, then Quit.
 struct MenuContent: View {
     @Bindable var model: AppModel
     @Environment(\.openWindow) private var openWindow
-    @State private var openAtLogin = SMAppService.mainApp.status == .enabled
+    @State private var startAtLogin = SMAppService.mainApp.status == .enabled
 
     var body: some View {
-        Text(statusLine)
-        if let line = statsLine { Text(line) }
-        Divider()
         if model.isSetUp {
-            if model.isRunning {
-                Button("Stop the Box") { Task { await model.stopBox() } }
-            } else {
-                Button("Start the Box") { Task { await model.startBox() } }
-            }
-            Button("Open TV Folder") { openFolder() }.disabled(model.status == nil)
-            Button("Open TV's Pages") { Task { _ = try? await model.tv.run(["pages"]) } }
+            Button("Open TVhome Pages") { Task { _ = try? await model.tv.run(["pages"]) } }
                 .disabled(!model.isRunning)
+            Button("Open TVhome Folder") { openFolder() }.disabled(model.status == nil)
             if model.pendingCodeChanges > 0 {
                 Button("Catch Up… (\(model.pendingCodeChanges) code change\(model.pendingCodeChanges == 1 ? "" : "s"))") {
                     showWindow()
@@ -28,12 +21,21 @@ struct MenuContent: View {
             }
             Divider()
         }
-        Button(model.isSetUp ? "Open Terminal Values…" : "Set Up Terminal Values…") { showWindow() }
-        Toggle("Open at Login", isOn: $openAtLogin)
-            .onChange(of: openAtLogin) { _, on in
-                do { if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() } }
-                catch { openAtLogin = SMAppService.mainApp.status == .enabled }
+        Text(statusLine)
+        if let line = statsLine { Text(line) }
+        if model.isSetUp {
+            if model.isRunning {
+                Button("Stop TV Box") { Task { await model.stopBox() } }
+            } else {
+                Button("Start TV Box") { Task { await model.startBox() } }
             }
+        }
+        Toggle("Start at Login", isOn: $startAtLogin)
+            .onChange(of: startAtLogin) { _, on in
+                do { if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() } }
+                catch { startAtLogin = SMAppService.mainApp.status == .enabled }
+            }
+        Button(model.isSetUp ? "Open TV Box Status…" : "Set Up Terminal Values…") { showWindow() }
         Divider()
         Button("Quit Terminal Values") { NSApplication.shared.terminate(nil) }
             .keyboardShortcut("q")
@@ -43,13 +45,13 @@ struct MenuContent: View {
         if let busy = model.busy { return busy }
         guard let s = model.status else { return model.statusProblem == nil ? "Checking…" : "tv isn't answering" }
         if !model.isSetUp { return "Not set up yet" }
-        guard s.box == .running else { return "The box is stopped" }
+        guard s.box == .running else { return "TV Box stopped" }
         switch (s.tailnet, s.sync) {
-        case (.offline?, _): return "Box running · offline"
-        case (_, let sync?) where !sync.connected: return "Box running · connecting…"
-        case (_, let sync?) where sync.needFiles > 0: return "Box running · \(sync.needFiles) files to get"
-        case (_, let sync?) where sync.sending > 0: return "Box running · sending \(sync.sending) files"
-        default: return "Box running · up to date"
+        case (.offline?, _): return "TV Box running · offline"
+        case (_, let sync?) where !sync.connected: return "TV Box running · connecting…"
+        case (_, let sync?) where sync.needFiles > 0: return "TV Box running · \(sync.needFiles) files to get"
+        case (_, let sync?) where sync.sending > 0: return "TV Box running · sending \(sync.sending) files"
+        default: return "TV Box running · up to date"
         }
     }
 

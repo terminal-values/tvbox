@@ -5,7 +5,7 @@ import Testing
 @MainActor @Suite struct DoctorTests {
     @Test func fixButtonsMatchFixIds() {
         let titles = [DoctorFix.startRuntime, .startBox, .catchUp, .update].map(Doctor.fixTitle)
-        #expect(titles == ["Start the Runtime", "Start the Box", "Review & Catch Up…", "Update…"])
+        #expect(titles == ["Start the Runtime", "Start TV Box", "Review & Catch Up…", "Update…"])
     }
 
     @Test func runsTheCheckUpAndActsOnAFix() async throws {
