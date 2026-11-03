@@ -1072,7 +1072,7 @@ def test_link_refuses_outside_the_folder(box, where):
 def test_link_refuses_a_missing_file(box):
     folder = linkable(box)
     r = box.tv("link", str(folder / "doc" / "nope.txt"))
-    assert r.returncode == 2 and "no " in r.stderr.lower()
+    assert r.returncode == 2 and "There's no" in r.stderr
 
 
 def test_link_on_a_mac_copies_it(box):
@@ -1086,3 +1086,13 @@ def test_link_on_a_mac_copies_it(box):
 def test_link_needs_no_box(box):
     folder = linkable(box)
     assert box.tv("link", str(folder / "ledger"), FAKE_DOWN="1").returncode == 0
+
+
+def test_link_takes_a_name_starting_with_a_dash(box):
+    folder = linkable(box)
+    (folder / "doc" / "-dash.txt").write_text("x")
+    for args in (["-dash.txt"], ["--", "-dash.txt"]):
+        r = subprocess.run([SH, str(TV), "link", *args], cwd=folder / "doc",
+                           capture_output=True, text=True, env=box_env(box))
+        assert r.returncode == 0, r.stderr
+        assert r.stdout.endswith("/folder/doc/-dash.txt\n")

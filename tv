@@ -593,12 +593,16 @@ cmd_link() {
     [ $# -gt 0 ] || die 2 "Usage: tv link PATH..."
     root=$(cd "$FOLDER" 2>/dev/null && pwd -P) || die 2 "The TVhome Folder, $FOLDER, isn't there."
     links=
+    [ "$1" != -- ] || shift
     for arg in "$@"; do
-        [ -e "$arg" ] || [ -L "$arg" ] || die 2 "There's no $arg."
+        # ./ keeps a name that starts with a dash from being read as an option.
+        case $arg in /*) p=$arg ;; *) p=./$arg ;; esac
+        [ -e "$p" ] || [ -L "$p" ] || die 2 "There's no $arg."
         # A physical path, so .., symlinks and a symlinked folder all agree.
-        if [ -d "$arg" ]; then abs=$(cd "$arg" && pwd -P); isdir=1
+        if [ -d "$p" ]; then abs=$(cd "$p" && pwd -P) || die 2 "There's no $arg."; isdir=1
         else
-            abs=$(cd "$(dirname "$arg")" && pwd -P)/$(basename "$arg"); isdir=
+            dir=$(cd "$(dirname "$p")" && pwd -P) || die 2 "There's no $arg."
+            abs=$dir/$(basename "$p"); isdir=
         fi
         case $abs in
             "$root") rel= ;;
