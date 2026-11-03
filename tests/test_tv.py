@@ -1113,3 +1113,11 @@ def test_link_takes_a_name_starting_with_a_dash(box):
                            capture_output=True, text=True, env=box_env(box))
         assert r.returncode == 0, r.stderr
         assert r.stdout.endswith("/folder/doc/-dash.txt\n")
+
+
+def test_link_with_only_a_double_dash_is_a_usage_error(box):
+    linkable(box)
+    fake_tool(box, "pbcopy", f'#!/bin/sh\ncat > {box.tmp}/clip\n')
+    r = box.tv("link", "--", FAKE_UNAME="Darwin")
+    assert r.returncode == 2 and "Usage" in r.stderr and r.stdout == ""
+    assert not (box.tmp / "clip").exists()

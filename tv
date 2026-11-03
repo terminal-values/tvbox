@@ -607,10 +607,10 @@ link_refusal() {
 # Mac, copy them). Needs no running box.
 cmd_link() {
     need_config
+    [ $# -gt 0 ] && [ "$1" = -- ] && shift
     [ $# -gt 0 ] || die 2 "Usage: tv link PATH..."
     root=$(cd "$FOLDER" 2>/dev/null && pwd -P) || die 2 "The TVhome Folder, $FOLDER, isn't there."
     links=
-    [ "$1" != -- ] || shift
     for arg in "$@"; do
         # ./ keeps a name that starts with a dash from being read as an option.
         case $arg in /*) p=$arg ;; *) p=./$arg ;; esac
