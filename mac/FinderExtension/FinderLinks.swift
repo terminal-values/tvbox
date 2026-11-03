@@ -5,26 +5,36 @@ import FinderSync
 /// rather than a Service, so the item shows only inside the TVhome Folder,
 /// at the top level of the menu. The links themselves are TVLink's.
 final class FinderLinks: FIFinderSync {
+    /// Follows tv move: the Finder only asks about the folder it's told to
+    /// watch, so once the old folder is gone no menu would ever re-read it.
+    private var configWatcher: DirectoryWatcher?
+
     override init() {
         super.init()
-        watchTheFolder()
+        Self.watchTheFolder()
+        configWatcher = DirectoryWatcher(directory: Self.configDirectory, queue: .main) {
+            Self.watchTheFolder()
+        }
+    }
+
+    /// tv's config directory in the real home, from the password database,
+    /// since NSHomeDirectory() is the sandbox's container.
+    private static var configDirectory: URL {
+        let home = getpwuid(getuid())?.pointee.pw_dir.map { String(cString: $0) } ?? NSHomeDirectory()
+        return URL(fileURLWithPath: home).appending(path: ".config/tv")
     }
 
     /// The folder, from tv's config: the one place that says where it is.
-    /// The real home comes from the password database, since
-    /// NSHomeDirectory() is the sandbox's container.
-    private var folder: URL? {
-        guard let pw = getpwuid(getuid()), let home = pw.pointee.pw_dir else { return nil }
-        let config = URL(fileURLWithPath: String(cString: home)).appending(path: ".config/tv/config")
-        guard let text = try? String(contentsOf: config, encoding: .utf8),
+    private static var folder: URL? {
+        guard let text = try? String(contentsOf: configDirectory.appending(path: "config"), encoding: .utf8),
               let path = TVLink.folder(fromConfig: text) else { return nil }
         return URL(fileURLWithPath: path, isDirectory: true)
     }
 
-    /// Tells the Finder which folder to ask about, read afresh each time so
-    /// a tv move is picked up.
+    /// Tells the Finder which folder to ask about, read afresh when the
+    /// config changes and before each menu.
     @discardableResult
-    private func watchTheFolder() -> URL? {
+    private static func watchTheFolder() -> URL? {
         let folder = folder
         let urls: Set<URL> = folder.map { [$0] } ?? []
         let controller = FIFinderSyncController.default()
@@ -45,7 +55,7 @@ final class FinderLinks: FIFinderSync {
     }
 
     override func menu(for menuKind: FIMenuKind) -> NSMenu? {
-        guard menuKind == .contextualMenuForItems, let folder = watchTheFolder() else { return nil }
+        guard menuKind == .contextualMenuForItems, let folder = Self.watchTheFolder() else { return nil }
         let menu = NSMenu(title: "")
         menu.autoenablesItems = false
         switch selectedLinks(folder: folder) {
@@ -66,7 +76,7 @@ final class FinderLinks: FIFinderSync {
     /// The Finder calls this with its own copy of the menu item, so the
     /// selection is asked for again.
     @objc func copyLinks(_ sender: AnyObject?) {
-        guard let folder = folder, case .success(let links) = selectedLinks(folder: folder),
+        guard let folder = Self.folder, case .success(let links) = selectedLinks(folder: folder),
               !links.isEmpty else { return }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(links.joined(separator: "\n"), forType: .string)
