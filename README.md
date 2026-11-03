@@ -59,6 +59,7 @@ tv catch-up            code and secrets up to date, code changes shown first
 tv push                commits and the secrets store to TVhome
 tv git ... / tv passage ... / tv run CMD ...   in the box, in the folder
 tv pages [PAGE]        TVhome Pages, via 127.0.0.1:8484
+tv link PATH           a TVhome link for a file in the folder, to share in TV Signal (on a Mac, also copies it)
 tv shell               a shell in the box
 tv export-key FILE     save a copy of your age key (readable only by you)
 tv import-key          bring one in (--replace to swap out a new one)
@@ -66,6 +67,10 @@ tv update              a newer box, showing tvbox's commits since yours first
                        (with the Mac app installed, the app updates itself and the box together)
 tv folder / move DIR    where the TVhome Folder is; put it somewhere else
 ```
+
+The box's port is always 8484. Setting `PORT=` in tv's config overrides
+it, for two boxes on one computer; TVhome links won't open on that
+computer then, and `tv doctor` says so.
 
 ## How it works
 
