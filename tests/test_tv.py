@@ -1255,3 +1255,27 @@ def test_link_with_the_folder_configured_in_another_case(box, mixed_case, shell)
     r = link_in(box, shell, mixed_case, str(mixed_case / "doc" / "board" / "oct.md"))
     assert r.returncode == 0, r.stderr
     assert r.stdout.endswith("/folder/doc/Board/Oct.md\n")
+
+
+def ls_colours(tmp):
+    """Does this ls colour its output when CLICOLOR_FORCE is set (a Mac's does)?"""
+    f = tmp / "colour-probe"
+    f.write_text("x")
+    f.chmod(0o755)
+    out = subprocess.run(["ls", "-1", str(tmp)], capture_output=True, text=True,
+                         env={"PATH": os.environ["PATH"], "CLICOLOR": "1", "CLICOLOR_FORCE": "1",
+                              "TERM": "xterm-256color"}).stdout
+    f.unlink()
+    return "\x1b" in out
+
+
+def test_link_ignores_a_colouring_ls(box, tmp_path):
+    if not ls_colours(tmp_path):
+        pytest.skip("this ls doesn't colour its output")
+    folder = linkable(box)
+    run = folder / "doc" / "Run.sh"
+    run.write_text("x")
+    run.chmod(0o755)
+    r = box.tv("link", str(run), CLICOLOR="1", CLICOLOR_FORCE="1", TERM="xterm-256color")
+    assert r.stdout == "http://box.terminalvalues.org:8484/folder/doc/Run.sh\n", r.stderr
+
