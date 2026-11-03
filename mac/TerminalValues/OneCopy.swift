@@ -23,6 +23,14 @@ struct AppVersion: Equatable {
         isDevelopment = (info["SUPublicEDKey"] as? String ?? "").isEmpty
     }
 
+    /// "v0.1.16/ffedefr": this version and the commit the box was built
+    /// from, as the menu and the window's footer show them. A development
+    /// build says "dev", since its 0.1.0 would mislead.
+    func tag(box: String?) -> String {
+        let mine = isDevelopment ? "dev" : "v" + short
+        return box.map { mine + "/" + $0.prefix(7) } ?? mine
+    }
+
     /// The version as numbers, then the build: 0.1.10 comes after 0.1.9.
     fileprivate var parts: [Int] {
         var numbers = short.split(separator: ".").map { Int($0) ?? 0 }

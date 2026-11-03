@@ -6,9 +6,14 @@ struct FooterView: View {
     var canUpdate = false
     var checkForUpdates: () -> Void = {}
 
+    /// The same "v0.1.16/ffedefr" as the menu's status line.
+    static func tag(_ model: AppModel, app: AppVersion) -> String {
+        app.tag(box: model.status?.revision ?? model.boxRevision)
+    }
+
     var body: some View {
         HStack {
-            Text("Box \((model.status?.revision ?? model.boxRevision).map { String($0.prefix(7)) } ?? "—")")
+            Text(Self.tag(model, app: AppVersion(info: Bundle.main.infoDictionary ?? [:])))
             Text("·")
             Button("Call the Doctor…", action: openDoctor)
                 .buttonStyle(.link).foregroundStyle(.secondary)

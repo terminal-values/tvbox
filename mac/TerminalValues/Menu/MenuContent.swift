@@ -42,17 +42,27 @@ struct MenuContent: View {
     }
 
     private var statusLine: String {
+        Self.statusLine(model, app: AppVersion(info: Bundle.main.infoDictionary ?? [:]))
+    }
+
+    /// The box's state, then which app and box this is.
+    static func statusLine(_ model: AppModel, app: AppVersion) -> String {
         if let busy = model.busy { return busy }
         guard let s = model.status else { return model.statusProblem == nil ? "Checking…" : "tv isn't answering" }
         if !model.isSetUp { return "Not set up yet" }
-        guard s.box == .running else { return "TV Box stopped" }
-        switch (s.tailnet, s.sync) {
-        case (.offline?, _): return "TV Box running · offline"
-        case (_, let sync?) where !sync.connected: return "TV Box running · connecting…"
-        case (_, let sync?) where sync.needFiles > 0: return "TV Box running · \(sync.needFiles) files to get"
-        case (_, let sync?) where sync.sending > 0: return "TV Box running · sending \(sync.sending) files"
-        default: return "TV Box running · up to date"
+        let state: String
+        if s.box != .running {
+            state = "TV Box stopped"
+        } else {
+            switch (s.tailnet, s.sync) {
+            case (.offline?, _): state = "TV Box running · offline"
+            case (_, let sync?) where !sync.connected: state = "TV Box running · connecting…"
+            case (_, let sync?) where sync.needFiles > 0: state = "TV Box running · \(sync.needFiles) files to get"
+            case (_, let sync?) where sync.sending > 0: state = "TV Box running · sending \(sync.sending) files"
+            default: state = "TV Box running · up to date"
+            }
         }
+        return state + " · " + app.tag(box: s.revision ?? model.boxRevision)
     }
 
     private var statsLine: String? {
