@@ -11,6 +11,9 @@ BOX=tvbox
 VOLUME=tv-state
 INSIDE=/home/tv/terminalvalues
 INNER_PORT=8484  # TV's pages, inside the box
+# TVhome links name this port on the member's computer, fixed forever, so
+# links keep working; it's separate from INNER_PORT, which only the box sees.
+LINK_PORT=8484
 REGISTRY=ghcr.io/terminal-values/tvbox
 DEFAULT_IMAGE=$REGISTRY:latest
 GITHUB=https://api.github.com/repos/terminal-values/tvbox
@@ -21,7 +24,7 @@ FOLDER= IMAGE= LOGIN= NAME= EMAIL= RUNTIME= REVISION= TAILNET= TVHOME_ID= PORT=
 [ -r "$CONFIG" ] && . "$CONFIG"
 IMAGE=${IMAGE:-$DEFAULT_IMAGE}
 # The pages' port on this computer: 8484. Set by hand only when two boxes share a computer; TVhome links need 8484.
-PORT=${PORT:-$INNER_PORT}
+PORT=${PORT:-$LINK_PORT}
 
 say() { printf '%s\n' "$*"; }
 # How to run tv again: plain tv if the shell finds it, else its full path
@@ -511,7 +514,7 @@ cmd_doctor() {
     if [ "${free:-0}" -lt 512000 ]; then dadd disk-mac problem "This computer is almost out of space."
     elif [ "${free:-0}" -lt 2097152 ]; then dadd disk-mac warning "This computer is getting low on space."
     else dadd disk-mac ok "This computer has room."; fi
-    if [ "$PORT" != 8484 ]; then
+    if [ "$PORT" != "$LINK_PORT" ]; then
         dadd port warning "The box uses port $PORT, not 8484, so TVhome links won't open on this computer. To fix it, stop whatever holds port 8484, set PORT='8484' in $CONFIG, then run tv stop and tv start."
     elif [ "$state" != running ] && port_busy "$PORT"; then
         dadd port problem "Something else is using port 8484, so the box can't start. It's usually another user's TV box on this computer."
@@ -520,8 +523,8 @@ cmd_doctor() {
     fi
     if [ "$state" != running ]; then
         dadd links warning "Not checked: the box isn't running."
-    elif [ "$PORT" != "$INNER_PORT" ]; then
-        dadd links warning "Not checked: the box isn't on port $INNER_PORT."
+    elif [ "$PORT" != "$LINK_PORT" ]; then
+        dadd links warning "Not checked: the box isn't on port $LINK_PORT."
     elif ! command -v curl >/dev/null 2>&1; then
         dadd links warning "Not checked: there's no curl on this computer."
     else
@@ -566,7 +569,7 @@ cmd_doctor() {
 
 # --- tv link ---------------------------------------------------------------
 
-LINK_BASE=http://box.terminalvalues.org:$INNER_PORT/folder/
+LINK_BASE=http://box.terminalvalues.org:$LINK_PORT/folder/
 
 # Percent-encode a path for a URL: A-Za-z0-9-._~ and / stay, every other byte
 # of the UTF-8 becomes %XX in capitals. Works on bytes (od), so it needs no

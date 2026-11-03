@@ -1129,3 +1129,24 @@ def test_link_with_only_a_double_dash_is_a_usage_error(box):
     r = box.tv("link", "--", FAKE_UNAME="Darwin")
     assert r.returncode == 2 and "Usage" in r.stderr and r.stdout == ""
     assert not (box.tmp / "clip").exists()
+
+
+def test_the_link_port_is_not_the_boxs_inner_port(box, tmp_path):
+    """Links name 8484 on this computer, whatever port the box uses inside."""
+    other = tmp_path / "tv-inner-9000"
+    other.write_text(TV.read_text().replace("\nINNER_PORT=8484", "\nINNER_PORT=9000", 1))
+    assert other.read_text() != TV.read_text()
+    folder = linkable(box)
+    (box.bin / "curl").symlink_to(FAKECURL)
+    box.configure(IMAGE="ghcr.io/terminal-values/tvbox@sha256:abc", REVISION=NEW)
+
+    def tv(*args, **env):
+        return subprocess.run([SH, str(other), *args], capture_output=True, text=True,
+                              env={**box_env(box), **env})
+    r = tv("link", str(folder / "ledger"))
+    assert r.stdout == "http://box.terminalvalues.org:8484/folder/ledger/\n", r.stderr
+    tv("start")
+    assert "127.0.0.1:8484:9000" in box.call("run")
+    r = tv("doctor", "--json", FAKE_STATE="running", FAKE_EXEC_OUT=BOX_DOCTOR)
+    res = {x["id"]: x for x in json.loads(r.stdout)["results"]}
+    assert res["port"]["status"] == "ok" and res["links"]["status"] == "ok", res
