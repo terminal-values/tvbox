@@ -525,7 +525,8 @@ cmd_doctor() {
     elif ! command -v curl >/dev/null 2>&1; then
         dadd links warning "Not checked: there's no curl on this computer."
     else
-        got=$(curl -s -o /dev/null -w '%{http_code} %{remote_ip}' --max-time 10 "$LINK_BASE" 2>/dev/null) && rc=0 || rc=$?
+        # Never through a proxy: the link has to reach this computer's box.
+        got=$(curl -s --noproxy '*' -o /dev/null -w '%{http_code} %{remote_ip}' --max-time 10 "$LINK_BASE" 2>/dev/null) && rc=0 || rc=$?
         code=${got%% *} ip=${got#* }
         if [ "$rc" = 6 ] || { [ -n "$ip" ] && [ "$ip" != 127.0.0.1 ]; }; then
             dadd links warning "box.terminalvalues.org doesn't lead to this computer here, so TVhome links won't open. Some routers and DNS services block names that point at 127.0.0.1: allow box.terminalvalues.org in the router's settings, or use another DNS service (such as 1.1.1.1)."

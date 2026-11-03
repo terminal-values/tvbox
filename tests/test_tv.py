@@ -902,6 +902,14 @@ def test_doctor_checks_links(box, fake, status, words):
     assert res["links"]["status"] == status and words in res["links"]["message"]
 
 
+def test_doctor_links_check_ignores_a_proxy(box):
+    updatable(box, revision=NEW)
+    box.configure(IMAGE="ghcr.io/terminal-values/tvbox@sha256:abc", REVISION=NEW)
+    res = doctor_json(box, FAKE_STATE="running", FAKE_EXEC_OUT=BOX_DOCTOR,
+                      http_proxy="http://proxy.example:3128")
+    assert res["links"]["status"] == "ok", res["links"]["message"]
+
+
 def test_doctor_skips_links_when_stopped_or_off_8484(box):
     updatable(box, revision=NEW)
     assert "Not checked" in doctor_json(box, FAKE_STATE="stopped")["links"]["message"]

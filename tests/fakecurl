@@ -29,6 +29,11 @@ def emit(text):
 if url.startswith("http://box.terminalvalues.org:"):
     # tv doctor's links check; -w is ignored, the answer is "CODE IP".
     links = os.environ.get("FAKE_LINKS", "ok")
+    if os.environ.get("http_proxy") and "--noproxy" not in args:
+        links = "proxy"  # curl would ask the proxy, which can't reach this computer
+    if links == "proxy":
+        sys.stdout.write("502 192.0.2.80")
+        sys.exit(0)
     if links == "unresolved":
         sys.stdout.write("000 ")
         sys.exit(6)
