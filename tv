@@ -631,14 +631,24 @@ physical_dir() { (cd "$1" 2>/dev/null && env pwd -P); }
 plain_ls() { (unset CLICOLOR CLICOLOR_FORCE QUOTING_STYLE LS_COLORS; LC_ALL=C ls "$@"); }
 
 # The name of $2 in directory $1 as the disk has it: the entry that is the
-# same file (by inode), preferring $2 itself. Prints $2 if there's none.
+# same file (by inode), preferring $2 itself, then one that differs from it
+# only in case (not a hard link with another name). Prints $2 if there's none.
 disk_name() {
     ino=$(plain_ls -di "$1/$2" 2>/dev/null | awk '{ print $1 }')
     [ -n "$ino" ] || { printf '%s\n' "$2"; return; }
     plain_ls -ai1 "$1" 2>/dev/null | INO=$ino NAME=$2 awk '
         { n = $0; sub(/^ *[0-9]+ /, "", n) }
-        $1 == ENVIRON["INO"] { if (n == ENVIRON["NAME"]) exact = 1; else if (other == "") other = n }
-        END { print (exact || other == "") ? ENVIRON["NAME"] : other }'
+        $1 == ENVIRON["INO"] {
+            if (n == ENVIRON["NAME"]) exact = 1
+            else if (tolower(n) == tolower(ENVIRON["NAME"])) { if (cased == "") cased = n }
+            else if (other == "") other = n
+        }
+        END {
+            name = ENVIRON["NAME"]
+            if (!exact && cased != "") name = cased
+            else if (!exact && other != "") name = other
+            print name
+        }'
 }
 
 # tv link PATH...: print the TVhome link for each file in the folder (and on a

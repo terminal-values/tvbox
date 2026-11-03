@@ -1279,3 +1279,10 @@ def test_link_ignores_a_colouring_ls(box, tmp_path):
     r = box.tv("link", str(run), CLICOLOR="1", CLICOLOR_FORCE="1", TERM="xterm-256color")
     assert r.stdout == "http://box.terminalvalues.org:8484/folder/doc/Run.sh\n", r.stderr
 
+
+
+@pytest.mark.parametrize("shell", SHELLS)
+def test_link_prefers_the_name_typed_over_a_hard_link(box, mixed_case, shell):
+    os.link(mixed_case / "doc" / "Board" / "Oct.md", mixed_case / "doc" / "Board" / "Aardvark.md")
+    r = link_in(box, shell, mixed_case, "doc/board/oct.md")
+    assert r.stdout.endswith("/folder/doc/Board/Oct.md\n"), r.stdout + r.stderr
