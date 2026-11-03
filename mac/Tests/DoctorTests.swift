@@ -4,8 +4,15 @@ import Testing
 
 @MainActor @Suite struct DoctorTests {
     @Test func fixButtonsMatchFixIds() {
-        let titles = [DoctorFix.startRuntime, .startBox, .catchUp, .update].map(Doctor.fixTitle)
-        #expect(titles == ["Start the Runtime", "Start TV Box", "Review & Catch Up…", "Update…"])
+        let titles = [DoctorFix.startRuntime, .startBox, .catchUp, .update, .finderExtension].map(Doctor.fixTitle)
+        #expect(titles == ["Start the Runtime", "Start TV Box", "Review & Catch Up…", "Update…",
+                           "Turn On in System Settings…"])
+    }
+
+    @Test func finderCheck() {
+        #expect(Doctor.finderCheck(enabled: true).status == .ok)
+        let off = Doctor.finderCheck(enabled: false)
+        #expect(off.status == .warning && off.fix == .finderExtension && off.message.contains("System Settings"))
     }
 
     @Test func runsTheCheckUpAndActsOnAFix() async throws {

@@ -92,6 +92,8 @@ struct UpdateCheck: Codable, Sendable, Equatable {
 enum DoctorStatus: String, Codable, Sendable { case ok, warning, problem }
 enum DoctorFix: String, Codable, Sendable {
     case startRuntime = "start-runtime", startBox = "start-box", catchUp = "catch-up", update
+    /// The app's own: tv doesn't know about the Finder extension.
+    case finderExtension = "finder-extension"
 }
 
 struct DoctorResult: Codable, Sendable, Equatable, Identifiable {

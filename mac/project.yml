@@ -39,6 +39,8 @@ targets:
     dependencies:
       - package: SwiftTerm
       - package: Sparkle
+      # Embedded in Contents/PlugIns.
+      - target: TerminalValuesFinder
     info:
       path: TerminalValues/Info.plist
       properties:
@@ -67,6 +69,34 @@ targets:
           install -m 755 "$SRCROOT/../tv" "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/tv"
     scheme:
       testTargets: [TerminalValuesTests]
+  # Copy TVhome Link in the Finder's right-click menu, for items in the
+  # TVhome Folder.
+  TerminalValuesFinder:
+    type: app-extension
+    platform: macOS
+    sources: [FinderExtension, Shared]
+    info:
+      path: FinderExtension/Info.plist
+      properties:
+        CFBundleDisplayName: Terminal Values
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        LSMinimumSystemVersion: "26.0"
+        NSHumanReadableCopyright: "MIT licence"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.FinderSync
+          NSExtensionPrincipalClass: "$(PRODUCT_MODULE_NAME).FinderLinks"
+    # Finder Sync extensions must be sandboxed. The exception lets it read
+    # tv's config, the one place that says where the folder is, even after
+    # tv move.
+    entitlements:
+      path: FinderExtension/FinderExtension.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.temporary-exception.files.home-relative-path.read-only: ["/.config/tv/"]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.terminalvalues.TerminalValues.FinderLinks
   TerminalValuesTests:
     type: bundle.unit-test
     platform: macOS

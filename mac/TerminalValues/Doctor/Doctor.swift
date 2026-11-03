@@ -1,3 +1,4 @@
+import FinderSync
 import Foundation
 import Observation
 
@@ -25,7 +26,21 @@ final class Doctor {
         case .startBox: "Start TV Box"
         case .catchUp: "Review & Catch Up…"
         case .update: "Update…"
+        case .finderExtension: "Turn On in System Settings…"
         }
+    }
+
+    /// Whether Copy TVhome Link is in the Finder's menu. Only the app can
+    /// tell, so it's added to tv's report here. macOS can leave a new
+    /// extension switched off, and the member is the only one who can turn
+    /// it on.
+    static func finderCheck(enabled: Bool) -> DoctorResult {
+        enabled
+            ? DoctorResult(id: "finder-link", status: .ok,
+                           message: "Copy TVhome Link is in the Finder's right-click menu.")
+            : DoctorResult(id: "finder-link", status: .warning,
+                           message: "Copy TVhome Link is switched off. Turn on Terminal Values under Login Items & Extensions in System Settings.",
+                           fix: .finderExtension)
     }
 
     func run() async {
@@ -33,6 +48,7 @@ final class Doctor {
         defer { running = false }
         do {
             report = try await doctorTV.json(DoctorReport.self, ["doctor", "--json"], timeout: .seconds(180))
+            report?.results.append(Self.finderCheck(enabled: FIFinderSyncController.isExtensionEnabled))
             problem = nil
         } catch {
             report = nil
@@ -55,6 +71,7 @@ final class Doctor {
             } else {
                 model.updateRequested = true
             }
+        case .finderExtension: FIFinderSyncController.showExtensionManagementInterface()
         }
         await run()
     }
