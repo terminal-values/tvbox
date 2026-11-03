@@ -942,6 +942,7 @@ def test_doctor_checks_links(box, fake, status, words):
     box.configure(IMAGE="ghcr.io/terminal-values/tvbox@sha256:abc", REVISION=NEW)
     res = doctor_json(box, FAKE_STATE="running", FAKE_EXEC_OUT=BOX_DOCTOR, FAKE_LINKS=fake)
     assert res["links"]["status"] == status and words in res["links"]["message"]
+    assert "127.0.0.1" not in res["links"]["message"]  # the name's DNS value isn't spelled out
 
 
 def test_doctor_links_check_ignores_a_proxy(box):
