@@ -12,13 +12,14 @@ import Testing
         let config = dir.appending(path: "config")
         try "FOLDER='/tmp/old'\n".write(to: config, atomically: false, encoding: .utf8)
 
+        // As write_config does: write config.tmp, then mv it over config.
+        // config.tmp is made first, so only the rename can wake the watcher.
+        let tmp = dir.appending(path: "config.tmp")
+        try "FOLDER='/tmp/new'\n".write(to: tmp, atomically: false, encoding: .utf8)
         let (changes, changed) = AsyncStream.makeStream(of: Void.self)
         let watcher = try #require(DirectoryWatcher(directory: dir, queue: DispatchQueue(label: "test")) {
             changed.yield()
         })
-        // As write_config does: write config.tmp, then mv it over config.
-        let tmp = dir.appending(path: "config.tmp")
-        try "FOLDER='/tmp/new'\n".write(to: tmp, atomically: false, encoding: .utf8)
         #expect(rename(tmp.path, config.path) == 0)
         var it = changes.makeAsyncIterator()
         await it.next()

@@ -57,6 +57,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         listenForStepAside()
         moveIn()
+        // The Finder extension watches tv's config directory to follow tv
+        // move. Sandboxed, it can't make the directory, so it's made here
+        // before tv join writes the config into it.
+        try? FileManager.default.createDirectory(
+            at: FileManager.default.homeDirectoryForCurrentUser.appending(path: ".config/tv"),
+            withIntermediateDirectories: true)
         model.pinned = BoxImage.read()
         let atLogin = Self.launchedAtLogin()
         if updatesOn { updater.startUpdater() }
