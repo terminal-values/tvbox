@@ -20,7 +20,7 @@ FAKE = Path(__file__).resolve().parent / "fakeruntime"
 # dash, Debian's sh and the strictest about POSIX, when this machine has it.
 SH = shutil.which("dash") or "sh"
 TOOLS = ["sh", "env", "python3", "id", "mkdir", "cat", "sed", "grep", "ls",
-         "uname", "mv", "rm", "rmdir", "tr", "dirname", "head", "chmod", "basename", "awk", "df", "cut", "readlink", "od"]
+         "uname", "mv", "rm", "rmdir", "tr", "dirname", "head", "chmod", "basename", "awk", "df", "cut", "readlink", "od", "sleep"]
 
 
 @pytest.fixture
@@ -29,8 +29,9 @@ def box(tmp_path):
 
 
 def box_env(box):
+    # TV_PORT_PAUSE=0: no half-second waits for a busy port.
     return {"PATH": str(box.bin), "HOME": str(box.home), "TV_CONFIG": str(box.config),
-            "FAKE_LOG": str(box.log), "SHELL": "/bin/zsh"}
+            "FAKE_LOG": str(box.log), "SHELL": "/bin/zsh", "TV_PORT_PAUSE": "0"}
 
 
 class Box:
@@ -382,6 +383,47 @@ def busy_ports(box, *ports):
     allowed = " ".join(str(p) for p in ports)
     (box.bin / "nc").write_text(f'#!/bin/sh\nfor a; do p=$a; done\nfor b in {allowed}; do [ "$p" = "$b" ] && exit 0; done\nexit 1\n')
     (box.bin / "nc").chmod(0o755)
+
+
+def port_busy_at_first(box, checks):
+    """A fake nc: 8484 is busy for the first `checks` checks, then free."""
+    count = box.tmp / "nccount"
+    count.write_text("0")
+    (box.bin / "nc").write_text(f'#!/bin/sh\nn=$(cat {count}); echo $((n + 1)) > {count}\n'
+                                f'[ "$n" -lt {checks} ]\n')
+    (box.bin / "nc").chmod(0o755)
+    return count
+
+
+def test_a_port_freed_a_moment_late_lets_the_box_start(box):
+    box.runtimes("docker")
+    box.configure()
+    count = port_busy_at_first(box, 3)
+    r = box.tv("start")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "127.0.0.1:8484:8484" in box.call("run")
+    assert count.read_text().strip() == "4"
+
+
+def test_a_port_that_stays_taken_is_refused_after_waiting(box):
+    box.runtimes("docker")
+    box.configure()
+    count = port_busy_at_first(box, 1000)
+    r = box.tv("start")
+    assert r.returncode != 0 and "taken" in r.stdout + r.stderr
+    assert count.read_text().strip() == "10"
+    assert not [c for c in box.calls() if len(c) > 1 and c[1] == "run"]
+
+
+def test_waiting_for_the_port_pauses_between_checks(box):
+    box.runtimes("docker")
+    box.configure()
+    port_busy_at_first(box, 2)
+    (box.bin / "sleep").unlink(missing_ok=True)
+    (box.bin / "sleep").write_text(f'#!/bin/sh\necho "$1" >> {box.tmp / "slept"}\n')
+    (box.bin / "sleep").chmod(0o755)
+    box.tv("start", TV_PORT_PAUSE="0.25")
+    assert (box.tmp / "slept").read_text().split() == ["0.25", "0.25"]
 
 
 def test_join_refuses_a_taken_port(box):

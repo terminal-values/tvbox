@@ -97,6 +97,18 @@ port_busy() {
     else return 1; fi
 }
 
+# Is PORT still busy after waiting up to about five seconds? A box just
+# removed (by tv update or tv move) can hold it for a moment after.
+port_stays_busy() {
+    tries=10
+    while port_busy "$1"; do
+        tries=$((tries - 1))
+        [ "$tries" -gt 0 ] || return 0
+        sleep "${TV_PORT_PAUSE:-0.5}"
+    done
+    return 1
+}
+
 port_taken_message() {
     say "Port $PORT on this computer is taken, and TVhome links need port 8484. It's usually another user's TV box on this computer: stop that one, then try again. To run this box on another port anyway, set PORT='8485' (say) in $CONFIG. TVhome Pages will work, but TVhome links won't open on this computer."
 }
@@ -104,7 +116,7 @@ port_taken_message() {
 # Make the box, on its port. Returns non-zero if the port is taken or the runtime won't.
 create_box() {
     need_config
-    if port_busy "$PORT"; then port_taken_message >&2; return 1; fi
+    if port_stays_busy "$PORT"; then port_taken_message >&2; return 1; fi
     [ -r "$CONFIG" ] && write_config
     if [ "$RT" = container ]; then
         container volume inspect "$VOLUME" >/dev/null 2>&1 ||
