@@ -619,23 +619,41 @@ link_refusal() {
     [ -z "$hidden" ] || echo hidden
 }
 
+# TVhome's disk is case-sensitive, so a link must use each name's case on
+# disk, even where this computer's disk (a Mac's, usually) takes any case.
+
+# The physical path of directory $1, in the case on disk. bash's builtin pwd
+# (a Mac's /bin/sh) keeps the case typed; the pwd program asks the disk.
+physical_dir() { (cd "$1" 2>/dev/null && env pwd -P); }
+
+# The name of $2 in directory $1 as the disk has it: the entry that is the
+# same file (by inode), preferring $2 itself. Prints $2 if there's none.
+disk_name() {
+    ino=$(ls -di "$1/$2" 2>/dev/null | awk '{ print $1 }')
+    [ -n "$ino" ] || { printf '%s\n' "$2"; return; }
+    ls -ai1 "$1" 2>/dev/null | INO=$ino NAME=$2 awk '
+        { n = $0; sub(/^ *[0-9]+ /, "", n) }
+        $1 == ENVIRON["INO"] { if (n == ENVIRON["NAME"]) exact = 1; else if (other == "") other = n }
+        END { print (exact || other == "") ? ENVIRON["NAME"] : other }'
+}
+
 # tv link PATH...: print the TVhome link for each file in the folder (and on a
 # Mac, copy them). Needs no running box.
 cmd_link() {
     need_config
     [ $# -gt 0 ] && [ "$1" = -- ] && shift
     [ $# -gt 0 ] || die 2 "Usage: tv link PATH..."
-    root=$(cd "$FOLDER" 2>/dev/null && pwd -P) || die 2 "The TVhome Folder, $FOLDER, isn't there."
+    root=$(physical_dir "$FOLDER") || die 2 "The TVhome Folder, $FOLDER, isn't there."
     links=
     for arg in "$@"; do
         # ./ keeps a name that starts with a dash from being read as an option.
         case $arg in /*) p=$arg ;; *) p=./$arg ;; esac
         [ -e "$p" ] || [ -L "$p" ] || die 2 "There's no $arg."
         # A physical path, so .., symlinks and a symlinked folder all agree.
-        if [ -d "$p" ]; then abs=$(cd "$p" && pwd -P) || die 2 "There's no $arg."; isdir=1
+        if [ -d "$p" ]; then abs=$(physical_dir "$p") || die 2 "There's no $arg."; isdir=1
         else
-            dir=$(cd "$(dirname "$p")" && pwd -P) || die 2 "There's no $arg."
-            abs=$dir/$(basename "$p"); isdir=
+            dir=$(physical_dir "$(dirname "$p")") || die 2 "There's no $arg."
+            abs=$dir/$(disk_name "$dir" "$(basename "$p")"); isdir=
         fi
         case $abs in
             "$root") rel= ;;

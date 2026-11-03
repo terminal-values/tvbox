@@ -20,7 +20,7 @@ FAKE = Path(__file__).resolve().parent / "fakeruntime"
 # dash, Debian's sh and the strictest about POSIX, when this machine has it.
 SH = shutil.which("dash") or "sh"
 TOOLS = ["sh", "env", "python3", "id", "mkdir", "cat", "sed", "grep", "ls",
-         "uname", "mv", "rm", "rmdir", "tr", "dirname", "head", "chmod", "basename", "awk", "df", "cut", "readlink", "od", "sleep"]
+         "uname", "mv", "rm", "rmdir", "tr", "dirname", "head", "chmod", "basename", "awk", "df", "cut", "readlink", "od", "sleep", "pwd"]
 
 
 @pytest.fixture
@@ -1192,3 +1192,65 @@ def test_the_link_port_is_not_the_boxs_inner_port(box, tmp_path):
     r = tv("doctor", "--json", FAKE_STATE="running", FAKE_EXEC_OUT=BOX_DOCTOR)
     res = {x["id"]: x for x in json.loads(r.stdout)["results"]}
     assert res["port"]["status"] == "ok" and res["links"]["status"] == "ok", res
+
+
+# --- tv link on a case-insensitive disk (a Mac's, usually) ---------------------
+
+# dash's pwd -P gives the case on disk; bash's (a Mac's /bin/sh) keeps the case
+# typed. tv must give the disk's case under both, since TVhome's disk isn't
+# case-insensitive.
+SHELLS = list(dict.fromkeys(s for s in (SH, shutil.which("bash")) if s))
+
+
+def case_insensitive(path):
+    probe = path / "CaseProbe"
+    probe.mkdir()
+    try:
+        return (path / "caseprobe").exists()
+    finally:
+        probe.rmdir()
+
+
+@pytest.fixture
+def mixed_case(box, tmp_path):
+    if not case_insensitive(tmp_path):
+        pytest.skip("needs a case-insensitive filesystem")
+    folder = linkable(box)
+    (folder / "doc" / "Board").mkdir()
+    (folder / "doc" / "Board" / "Oct.md").write_text("x")
+    (folder / "ledger" / "journal.dat").write_text("x")
+    return folder
+
+
+def link_in(box, shell, cwd, *args, **env):
+    return subprocess.run([shell, str(TV), "link", *args], cwd=cwd, capture_output=True,
+                          text=True, env={**box_env(box), **env})
+
+
+@pytest.mark.parametrize("shell", SHELLS)
+@pytest.mark.parametrize("typed,want", [
+    ("doc/board/oct.md", "doc/Board/Oct.md"),
+    ("DOC/BOARD/OCT.MD", "doc/Board/Oct.md"),
+    ("doc/Board/oct.md", "doc/Board/Oct.md"),
+    ("LEDGER/journal.dat", "ledger/journal.dat"),
+    ("doc/board", "doc/Board/"),
+    ("Ledger", "ledger/")])
+def test_link_uses_the_case_on_disk(box, mixed_case, shell, typed, want):
+    r = link_in(box, shell, mixed_case, typed)
+    assert r.returncode == 0, r.stderr
+    assert r.stdout == "http://box.terminalvalues.org:8484/folder/" + want + "\n"
+
+
+@pytest.mark.parametrize("shell", SHELLS)
+def test_link_from_a_cwd_typed_in_another_case(box, mixed_case, shell):
+    cwd = str(mixed_case).replace("terminalvalues", "TerminalValues")
+    r = link_in(box, shell, cwd, "doc/board/oct.md")
+    assert r.stdout.endswith("/folder/doc/Board/Oct.md\n"), r.stderr
+
+
+@pytest.mark.parametrize("shell", SHELLS)
+def test_link_with_the_folder_configured_in_another_case(box, mixed_case, shell):
+    box.configure(FOLDER=str(mixed_case).replace("terminalvalues", "TERMINALVALUES"))
+    r = link_in(box, shell, mixed_case, str(mixed_case / "doc" / "board" / "oct.md"))
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.endswith("/folder/doc/Board/Oct.md\n")
