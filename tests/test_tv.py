@@ -875,7 +875,7 @@ BOX_DOCTOR = json.dumps({"results": [
               "folder", "stignore", "age-key", "recipient", "disk-box"]]})
 ALL_IDS = ["runtime", "box", "image", "tailnet", "route", "tvhome-ssh", "tvhome-pages",
            "tvhome-sync", "sync-errors", "folder", "stignore", "age-key", "recipient",
-           "disk-box", "disk-mac", "port", "newer-box"]
+           "disk-box", "disk-mac", "port", "links", "newer-box"]
 
 
 def doctor_json(box, **env):
@@ -890,6 +890,23 @@ def test_doctor_all_ok(box):
     res = doctor_json(box, FAKE_STATE="running", FAKE_EXEC_OUT=BOX_DOCTOR)
     assert list(res) == ALL_IDS
     assert [i for i, x in res.items() if x["status"] != "ok"] == []
+
+
+@pytest.mark.parametrize("fake,status,words", [
+    ("ok", "ok", "open"), ("unresolved", "warning", "router"),
+    ("elsewhere", "warning", "router"), ("down", "warning", "don't answer")])
+def test_doctor_checks_links(box, fake, status, words):
+    updatable(box, revision=NEW)
+    box.configure(IMAGE="ghcr.io/terminal-values/tvbox@sha256:abc", REVISION=NEW)
+    res = doctor_json(box, FAKE_STATE="running", FAKE_EXEC_OUT=BOX_DOCTOR, FAKE_LINKS=fake)
+    assert res["links"]["status"] == status and words in res["links"]["message"]
+
+
+def test_doctor_skips_links_when_stopped_or_off_8484(box):
+    updatable(box, revision=NEW)
+    assert "Not checked" in doctor_json(box, FAKE_STATE="stopped")["links"]["message"]
+    box.configure(IMAGE="ghcr.io/terminal-values/tvbox@sha256:old", REVISION=NEW, PORT="8485")
+    assert "Not checked" in doctor_json(box, FAKE_STATE="running", FAKE_EXEC_OUT=BOX_DOCTOR)["links"]["message"]
 
 
 def test_doctor_runtime_down_suggests_start_runtime(box):

@@ -26,7 +26,17 @@ def emit(text):
         sys.stdout.write(text)
 
 
-if url.endswith("/repos/terminal-values/tvbox/commits/main"):
+if url.startswith("http://box.terminalvalues.org:"):
+    # tv doctor's links check; -w is ignored, the answer is "CODE IP".
+    links = os.environ.get("FAKE_LINKS", "ok")
+    if links == "unresolved":
+        sys.stdout.write("000 ")
+        sys.exit(6)
+    if links == "down":
+        sys.stdout.write("000 127.0.0.1")
+        sys.exit(7)
+    sys.stdout.write("200 203.0.113.9" if links == "elsewhere" else "200 127.0.0.1")
+elif url.endswith("/repos/terminal-values/tvbox/commits/main"):
     emit(json.dumps({"sha": new, "commit": {"message": "newest"}}, indent=2))
 elif "/repos/terminal-values/tvbox/commits?" in url:
     emit(json.dumps([

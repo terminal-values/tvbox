@@ -518,6 +518,23 @@ cmd_doctor() {
     else
         dadd port ok "Port 8484 is the box's."
     fi
+    if [ "$state" != running ]; then
+        dadd links warning "Not checked: the box isn't running."
+    elif [ "$PORT" != "$INNER_PORT" ]; then
+        dadd links warning "Not checked: the box isn't on port $INNER_PORT."
+    elif ! command -v curl >/dev/null 2>&1; then
+        dadd links warning "Not checked: there's no curl on this computer."
+    else
+        got=$(curl -s -o /dev/null -w '%{http_code} %{remote_ip}' --max-time 10 "$LINK_BASE" 2>/dev/null) && rc=0 || rc=$?
+        code=${got%% *} ip=${got#* }
+        if [ "$rc" = 6 ] || { [ -n "$ip" ] && [ "$ip" != 127.0.0.1 ]; }; then
+            dadd links warning "box.terminalvalues.org doesn't lead to this computer here, so TVhome links won't open. Some routers and DNS services block names that point at 127.0.0.1: allow box.terminalvalues.org in the router's settings, or use another DNS service (such as 1.1.1.1)."
+        elif [ "$rc" != 0 ] || [ "$code" != 200 ]; then
+            dadd links warning "TVhome links don't answer through the box (got $code)."
+        else
+            dadd links ok "TVhome links open on this computer."
+        fi
+    fi
     # The Mac app says which box its release was built with; that's the one to have.
     if [ -n "${TV_PINNED_REVISION:-}" ]; then
         if [ "$TV_PINNED_REVISION" = "$REVISION" ]; then dadd newer-box ok "The box is the version this app expects."
