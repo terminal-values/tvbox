@@ -795,7 +795,7 @@ real_path() {
 }
 
 # Files that run code when opened, by extension (lower case). One list.
-CODE_EXTENSIONS="app command sh bash zsh py pl rb scpt workflow terminal desktop jar exe bat"
+CODE_EXTENSIONS="app command sh bash zsh py pl rb scpt workflow terminal desktop jar exe bat pkg mpkg prefpane saver fileloc inetloc webloc shortcut"
 
 # Would opening resolved path $1 run code? An executable file, or a name ending
 # in one of CODE_EXTENSIONS (an .app is a folder).

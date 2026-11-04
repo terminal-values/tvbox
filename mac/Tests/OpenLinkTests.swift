@@ -10,15 +10,17 @@ import Testing
         var folder: String { base + "/tv" }
         init() {
             base = NSTemporaryDirectory() + "tv-open-\(UUID().uuidString)"
-            for dir in ["", "/tv", "/tv/doc", "/tv/ledger", "/tv/doc/Thing.app", "/tv/doc/plain", "/outside"] {
+            for dir in ["", "/tv", "/tv/doc", "/tv/ledger", "/tv/doc/Thing.app", "/tv/doc/plain", "/tv/doc/Notes.rtfd", "/tv/doc/Setup.pkg", "/outside"] {
                 mkdir(base + dir, 0o755)
             }
             for file in ["/tv/doc/a.md", "/tv/doc/run.sh", "/tv/doc/x.pdf", "/tv/doc/go.command",
-                         "/tv/doc/job.PY", "/tv/doc/job2.SH", "/tv/doc/budget.docm", "/tv/doc/budget.xlsm",
+                         "/tv/doc/job.PY", "/tv/doc/job2.SH", "/tv/doc/budget.docm", "/tv/doc/budget.xlsm", "/tv/doc/xbudget.docm",
                          "/outside/b.txt"] {
                 close(open(base + file, O_CREAT | O_WRONLY, 0o644))
             }
             chmod(base + "/tv/doc/x.pdf", 0o755)
+            chmod(base + "/tv/doc/xbudget.docm", 0o755)
+            symlink("run.sh", base + "/tv/doc/notes.md")
             symlink("../../outside", base + "/tv/doc/away")
         }
         deinit { try? FileManager.default.removeItem(atPath: base) }
@@ -52,12 +54,25 @@ import Testing
         #expect(answer(t, "ledger/").buttons == [.showInFinder, .cancel])
     }
 
-    @Test(arguments: ["doc/run.sh", "doc/x.pdf", "doc/Thing.app/", "doc/go.command", "doc/job.PY"])
+    @Test(arguments: ["doc/run.sh", "doc/x.pdf", "doc/Thing.app/", "doc/go.command", "doc/job.PY",
+                         "doc/xbudget.docm", "doc/notes.md", "doc/Setup.pkg/"])
     func codeOffersOnlyShow(_ path: String) {
         let t = Tree()
         let a = answer(t, path)
         guard case .runsCode = a else { Issue.record("got \(a)"); return }
         #expect(a.buttons == [.showInFinder, .cancel])
+    }
+
+    @Test func aPackageIsAFileNotAFolder() {
+        let t = Tree()
+        guard case .open(let name, _, _, let logical, _) = answer(t, "doc/Notes.rtfd/") else { Issue.record("not open"); return }
+        #expect(name == "Notes.rtfd")
+        let a = answer(t, "doc/Notes.rtfd/")
+        #expect(TerminalValues.afterChoice(.showInFinder, on: a, recheck: { a }) == .reveal(logical: logical))
+    }
+
+    @Test func aPathThatCantBeExaminedCountsAsCode() {
+        #expect(runsCode(atPath: "/nonexistent/\(UUID().uuidString)"))
     }
 
     @Test func noAppOffersOnlyShow() {

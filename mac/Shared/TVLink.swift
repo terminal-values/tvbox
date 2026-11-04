@@ -153,7 +153,8 @@ extension TVLink {
     /// Files that run code when opened, by extension (lower case, no dot).
     static let runsCodeExtensions: Set<String> = [
         "app", "command", "sh", "bash", "zsh", "py", "pl", "rb", "scpt", "workflow",
-        "terminal", "desktop", "jar", "exe", "bat",
+        "terminal", "desktop", "jar", "exe", "bat", "pkg", "mpkg", "prefpane", "saver", "fileloc",
+        "inetloc", "webloc", "shortcut",
     ]
 
     private static let prefixes = ["tvhome://folder/", "http://box.terminalvalues.org:8484/folder/"]

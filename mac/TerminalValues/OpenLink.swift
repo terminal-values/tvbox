@@ -45,7 +45,7 @@ func answer(for link: String, folder: String?,
     case .success(.missing): return .notHereYet(name: name, shown: decoded.path)
     case .success(.here(let logical, let resolved, let isDirectory)):
         if runsCode(resolved) { return .runsCode(name: name, shown: decoded.path, logical: logical) }
-        if isDirectory { return .showFolder(name: name, logical: logical) }
+        if isDirectory && !isPackage(resolved) { return .showFolder(name: name, logical: logical) }
         guard let app = appName(resolved) else { return .noApp(name: name, shown: decoded.path, logical: logical) }
         return .open(name: name, shown: decoded.path, app: app, logical: logical, resolved: resolved)
     }
@@ -70,12 +70,19 @@ func afterChoice(_ button: LinkButton, on answer: LinkAnswer, recheck: () -> Lin
     }
 }
 
+/// A directory the Finder treats as one file (.rtfd, .pkg, a bundle).
+func isPackage(_ resolved: String) -> Bool {
+    (try? URL(fileURLWithPath: resolved).resourceValues(forKeys: [.isPackageKey]))?.isPackage ?? false
+}
+
 /// Whether opening this file could run code: a regular file with any execute
-/// bit, an app bundle, a script or program extension, or a content type that
-/// is executable, a script or an application.
+/// bit, or an extension in TVLink.runsCodeExtensions (that list is what
+/// catches .terminal, .workflow, installers and location files). Beyond
+/// those, a content type that is executable, a script or an application. A
+/// path that can't be examined counts as code.
 func runsCode(atPath resolved: String) -> Bool {
     var st = stat()
-    guard stat(resolved, &st) == 0 else { return false }
+    guard stat(resolved, &st) == 0 else { return true }
     let ext = (resolved as NSString).pathExtension.lowercased()
     if TVLink.runsCodeExtensions.contains(ext) { return true }
     if st.st_mode & S_IFMT == S_IFREG, st.st_mode & 0o111 != 0 { return true }

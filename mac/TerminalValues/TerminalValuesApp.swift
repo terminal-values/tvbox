@@ -90,8 +90,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         linkQueue += urls.filter { $0.scheme?.lowercased() == "tvhome" }
         guard !handlingLinks else { return }
         handlingLinks = true
-        while !linkQueue.isEmpty { handleLink(linkQueue.removeFirst().absoluteString) }
-        handlingLinks = false
+        // Later, so that launching finishes (the box starts) before a
+        // dialog blocks the main thread.
+        DispatchQueue.main.async { [self] in
+            while !linkQueue.isEmpty { handleLink(linkQueue.removeFirst().absoluteString) }
+            handlingLinks = false
+        }
     }
 
     /// Shows the member which file and app, then does what they choose.
@@ -109,8 +113,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let n = alert.runModal().rawValue - NSApplication.ModalResponse.alertFirstButtonReturn.rawValue
             guard buttons.indices.contains(n) else { return }
             switch afterChoice(buttons[n], on: shown, recheck: { answer(for: link, folder: Self.tvFolder()) }) {
-            case .open(let resolved), .openFolder(let resolved):
+            case .open(let resolved):
                 NSWorkspace.shared.open(URL(fileURLWithPath: resolved))
+                return
+            case .openFolder(let logical):
+                // Only the Finder opens a folder, never another app.
+                NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: logical)
                 return
             case .reveal(let logical):
                 NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: logical)])
