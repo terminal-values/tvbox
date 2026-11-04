@@ -7,6 +7,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -1312,3 +1313,229 @@ def test_link_prefers_the_name_typed_over_a_hard_link(box, mixed_case, shell):
     os.link(mixed_case / "doc" / "Board" / "Oct.md", mixed_case / "doc" / "Board" / "Aardvark.md")
     r = link_in(box, shell, mixed_case, "doc/board/oct.md")
     assert r.stdout.endswith("/folder/doc/Board/Oct.md\n"), r.stdout + r.stderr
+
+
+# --- tv open ------------------------------------------------------------------
+
+def tv_on_a_terminal(box, *args, answer="y\n", **env):
+    master, slave = os.openpty()
+    os.write(master, answer.encode())
+    e = box_env(box)
+    e.update(env)
+    try:
+        return subprocess.run([SH, str(TV), *args], stdin=slave, capture_output=True, text=True, env=e)
+    finally:
+        os.close(slave)
+        os.close(master)
+
+
+def opener(box, name="xdg-open"):
+    fake_tool(box, name, f'printf "%s\\n" "$@" >> {box.tmp}/opened')
+    return box.tmp / "opened"
+
+
+REASONS = {"not-a-link": "isn't a TVhome link", "traversal": "doesn't name a file in the TVhome Folder",
+           "nul": "doesn't name a file in the TVhome Folder", "utf8": "doesn't name a file in the TVhome Folder",
+           "git": "travels by git", "hidden": "is hidden"}
+
+
+def openable(box):
+    folder = linkable(box)
+    for c in LINKS["decodes"]:
+        p = folder / c["path"]
+        if c["dir"]:
+            p.mkdir(parents=True, exist_ok=True)
+        else:
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text("x")
+    return folder
+
+
+@pytest.mark.parametrize("case", LINKS["decodes"], ids=lambda c: c["link"])
+def test_open_print_gives_the_local_path(box, case):
+    folder = openable(box)
+    opened = opener(box)
+    r = box.tv("open", "--print", case["link"])
+    want = str(folder / case["path"]) if case["path"] else str(folder)
+    assert (r.returncode, r.stdout) == (0, want + "\n"), r.stderr
+    assert not opened.exists()
+
+
+@pytest.mark.parametrize("case", LINKS["refused_links"], ids=lambda c: c["link"])
+def test_open_refuses_bad_links(box, case):
+    openable(box)
+    r = box.tv("open", case["link"])
+    assert (r.returncode, r.stdout) == (2, "")
+    assert REASONS[case["refused"]] in r.stderr
+
+
+def test_open_refuses_raw_bad_bytes_quietly(box):
+    openable(box)
+    r = subprocess.run([SH, str(TV), "open", "--print", b"tvhome://folder/doc/\xff"], capture_output=True,
+                       env={**box_env(box), "LC_ALL": "en_US.UTF-8"})
+    assert r.returncode == 2 and r.stdout == b""
+    assert r.stderr.decode().strip() == "That link doesn't name a file in the TVhome Folder.", r.stderr
+
+
+LINK = "tvhome://folder/doc/minutes/2026-10.md"
+
+
+def test_open_asks_then_opens(box):
+    folder = openable(box)
+    opened = opener(box)
+    r = tv_on_a_terminal(box, "open", LINK)
+    assert r.returncode == 0, r.stderr
+    assert r.stdout == f"{folder}/doc/minutes/2026-10.md\n"
+    assert "Open it?" in r.stderr
+    assert opened.read_text() == f"{folder.resolve()}/doc/minutes/2026-10.md\n"
+
+
+def test_open_declined_opens_nothing(box):
+    openable(box)
+    opened = opener(box)
+    r = tv_on_a_terminal(box, "open", LINK, answer="n\n")
+    assert r.returncode == 0 and not opened.exists()
+
+
+def test_open_without_a_terminal_only_prints(box):
+    folder = openable(box)
+    opened = opener(box)
+    r = box.tv("open", LINK)
+    assert (r.returncode, r.stdout) == (0, f"{folder}/doc/minutes/2026-10.md\n")
+    assert not opened.exists()
+
+
+@pytest.mark.parametrize("link", ["tvhome://folder/ledger/", "tvhome://folder/ledger"])
+def test_open_a_folder_asks_and_opens(box, link):
+    folder = openable(box)
+    opened = opener(box)
+    r = tv_on_a_terminal(box, "open", link)
+    assert r.returncode == 0, r.stderr
+    assert opened.read_text() == f"{folder.resolve()}/ledger\n"
+
+
+@pytest.mark.parametrize("link", ["tvhome://folder/doc/nope.txt",
+                                  "http://box.terminalvalues.org:8484/folder/doc/nope.txt"])
+def test_open_a_missing_file(box, link):
+    folder = openable(box)
+    r = box.tv("open", link)
+    assert (r.returncode, r.stdout) == (3, f"{folder}/doc/nope.txt\n")
+    assert "isn't on this computer yet" in r.stderr
+
+
+def test_open_a_dangling_symlink_is_missing(box):
+    folder = openable(box)
+    (folder / "doc" / "dangling.md").symlink_to("nowhere.md")
+    r = box.tv("open", "tvhome://folder/doc/dangling.md")
+    assert r.returncode == 3 and "isn't on this computer yet" in r.stderr
+
+
+def test_open_refuses_a_symlink_out(box, tmp_path):
+    folder = openable(box)
+    (box.home / "outside").mkdir()
+    (box.home / "outside" / "b.txt").write_text("x")
+    (folder / "doc" / "away").symlink_to("../../outside")
+    opened = opener(box)
+    r = tv_on_a_terminal(box, "open", "tvhome://folder/doc/away/b.txt")
+    assert (r.returncode, r.stdout) == (2, "")
+    assert "outside the TVhome Folder" in r.stderr and not opened.exists()
+
+
+def test_open_follows_a_relative_link_from_where_it_really_is(box):
+    folder = openable(box)
+    (folder / "doc" / "real").mkdir()
+    (folder / "doc" / "real" / "t.md").write_text("x")
+    (folder / "doc" / "via").symlink_to("real")
+    (folder / "doc" / "real" / "l.md").symlink_to("t.md")
+    opened = opener(box)
+    r = tv_on_a_terminal(box, "open", "tvhome://folder/doc/via/l.md")
+    assert r.returncode == 0, r.stderr
+    assert opened.read_text() == f"{folder.resolve()}/doc/real/t.md\n"
+
+
+def test_open_through_a_symlink_inside(box):
+    folder = openable(box)
+    (folder / "doc" / "alias.md").symlink_to("minutes/2026-10.md")
+    opened = opener(box)
+    r = tv_on_a_terminal(box, "open", "tvhome://folder/doc/alias.md")
+    assert r.returncode == 0, r.stderr
+    assert r.stdout == f"{folder}/doc/alias.md\n"
+    assert opened.read_text() == f"{folder.resolve()}/doc/minutes/2026-10.md\n"
+
+
+def code_file(folder, kind):
+    doc = folder / "doc"
+    if kind == "exec":
+        (doc / "x.pdf").write_text("x"); (doc / "x.pdf").chmod(0o755); return "x.pdf"
+    if kind == "command":
+        (doc / "run.command").write_text("x"); return "run.command"
+    if kind == "app":
+        (doc / "Thing.app").mkdir(); return "Thing.app"
+    (doc / "run.sh").write_text("x")
+    (doc / "notes.txt").symlink_to("run.sh"); return "notes.txt"
+
+
+@pytest.mark.parametrize("kind", ["exec", "command", "app", "symlink"])
+def test_open_will_not_open_code(box, kind):
+    folder = openable(box)
+    name = code_file(folder, kind)
+    opened = opener(box)
+    r = tv_on_a_terminal(box, "open", f"tvhome://folder/doc/{name}")
+    assert (r.returncode, r.stdout) == (1, f"{folder}/doc/{name}\n"), r.stderr
+    assert "runs code when opened" in r.stderr and not opened.exists()
+
+
+@pytest.mark.parametrize("upper", [False, True])
+@pytest.mark.parametrize("ext", LINKS["runs_code_extensions"])
+def test_open_runs_code_extensions(box, ext, upper):
+    folder = openable(box)
+    name = "X." + ext.upper() if upper else "x." + ext
+    (folder / "doc" / name).write_text("x")
+    opened = opener(box)
+    r = tv_on_a_terminal(box, "open", f"tvhome://folder/doc/{name}")
+    assert r.returncode == 1 and "runs code when opened" in r.stderr and not opened.exists()
+
+
+def test_open_macro_documents_open(box):
+    folder = openable(box)
+    (folder / "doc" / "budget.xlsm").write_text("x")
+    opened = opener(box)
+    r = tv_on_a_terminal(box, "open", "tvhome://folder/doc/budget.xlsm")
+    assert r.returncode == 0 and opened.read_text() == f"{folder.resolve()}/doc/budget.xlsm\n"
+
+
+def test_open_on_a_mac_uses_open(box):
+    folder = openable(box)
+    opened = opener(box, "open")
+    r = tv_on_a_terminal(box, "open", LINK, FAKE_UNAME="Darwin")
+    assert r.returncode == 0 and opened.read_text() == f"{folder.resolve()}/doc/minutes/2026-10.md\n"
+    (box.bin / "open").unlink()
+    r = tv_on_a_terminal(box, "open", LINK, FAKE_UNAME="Darwin")
+    assert r.returncode == 1
+
+
+def test_open_with_nothing_to_open_it_with(box):
+    openable(box)
+    r = tv_on_a_terminal(box, "open", LINK)
+    assert r.returncode == 1 and "xdg-open" in r.stderr
+
+
+def test_open_needs_no_box(box):
+    openable(box)
+    r = box.tv("open", "--print", LINK, FAKE_DOWN="1")
+    assert r.returncode == 0, r.stderr
+
+
+@pytest.mark.parametrize("args", [[], ["--"]])
+def test_open_usage(box, args):
+    openable(box)
+    r = box.tv("open", *args)
+    assert r.returncode == 2 and "Usage" in r.stderr
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="needs a normalization-insensitive disk")
+def test_open_finds_a_decomposed_name(box):
+    folder = openable(box)
+    (folder / "doc" / "café.txt").write_text("x")
+    r = box.tv("open", "--print", "tvhome://folder/doc/caf%C3%A9.txt")
+    assert r.returncode == 0, r.stderr
