@@ -619,6 +619,94 @@ link_refusal() {
     [ -z "$hidden" ] || echo hidden
 }
 
+# Read a TVhome link back into a path in the folder: the opposite of tv link.
+# Accepts http://box.terminalvalues.org:PORT/folder/PATH and tvhome://folder/PATH
+# (scheme and host in any case; a query or fragment is ignored). On success it
+# returns 0 and sets rel (the decoded path, no leading or trailing /, empty for
+# the folder itself) and isdir (1 if the link ends in / or is the folder). On
+# refusal it returns 1 and sets why to one of not-a-link, traversal, nul, utf8,
+# git, hidden: the first that applies, in that order.
+decode_link() {
+    rel= isdir= why=
+    link=${1%%#*}; link=${link%%\?*}
+    lower=$(printf '%s' "$link" | tr 'A-Z' 'a-z')
+    case $lower in
+        tvhome://folder/*) skip=16 ;;
+        http://box.terminalvalues.org:8484/*) skip=34 ;;
+        *) why=not-a-link; return 1 ;;
+    esac
+    p=$link
+    while [ "$skip" -gt 0 ]; do p=${p#?}; skip=$((skip - 1)); done
+    case $lower in
+        http:*) case $p in /folder/*) p=${p#/folder/} ;; *) why=not-a-link; return 1 ;; esac ;;
+        *) ;;
+    esac
+    case $p in ''|*/) isdir=1 ;; esac
+    p=${p%/}
+    if [ -n "$p" ]; then
+        # One pass over the bytes: percent-decode each component, collecting
+        # faults. The answer is "ok" and the path as \ooo escapes for printf
+        # (no byte over 127 goes through awk's %c), or the first fault.
+        res=$(printf '%s' "$p" | od -An -v -tx1 | awk '
+            BEGIN { for (i = 0; i < 256; i++) hex[sprintf("%02x", i)] = i }
+            function isx(c) { return (c >= 48 && c <= 57) || (c >= 65 && c <= 70) || (c >= 97 && c <= 102) }
+            function xv(c) { return c <= 57 ? c - 48 : (c <= 70 ? c - 55 : c - 87) }
+            function endcomp() {
+                if (cl == 0 || (cl <= 2 && alldots)) trav = 1
+                dec[m++] = 47; cl = 0; alldots = 1
+            }
+            { for (i = 1; i <= NF; i++) b[n++] = hex[$i] }
+            END {
+                alldots = 1
+                for (i = 0; i < n; i++) {
+                    c = b[i]
+                    if (c == 47) { endcomp(); continue }
+                    if (c == 37) {
+                        if (i + 2 < n && isx(b[i+1]) && isx(b[i+2])) {
+                            v = xv(b[i+1]) * 16 + xv(b[i+2]); i += 2
+                            if (v == 47) trav = 1
+                        } else { nal = 1; continue }
+                    } else v = c
+                    if (v == 0) nul = 1
+                    if (v != 46) alldots = 0
+                    cl++; dec[m++] = v
+                }
+                endcomp(); m--
+                # strict UTF-8 over the decoded bytes
+                for (i = 0; i < m && !bad; i++) {
+                    c = dec[i]; k = 0; lo = 128; hi = 191
+                    if (c < 128) continue
+                    else if (c >= 194 && c <= 223) k = 1
+                    else if (c >= 224 && c <= 239) { k = 2; if (c == 224) lo = 160; if (c == 237) hi = 159 }
+                    else if (c >= 240 && c <= 244) { k = 3; if (c == 240) lo = 144; if (c == 244) hi = 143 }
+                    else { bad = 1; break }
+                    for (j = 1; j <= k; j++) {
+                        d = (i + j < m) ? dec[i+j] : -1
+                        if (d < lo || d > hi) { bad = 1; break }
+                        lo = 128; hi = 191
+                    }
+                    i += k
+                }
+                if (nal) print "not-a-link"
+                else if (trav) print "traversal"
+                else if (nul) print "nul"
+                else if (bad) print "utf8"
+                else {
+                    printf "ok"
+                    for (i = 0; i < m; i++) printf "\\%03o", dec[i]
+                    print ""
+                }
+            }')
+        case $res in
+            ok*) esc=${res#ok}
+                 rel=$(printf "$esc"; printf x); rel=${rel%x} ;;
+            *) why=$res; return 1 ;;
+        esac
+    fi
+    why=$(link_refusal "$rel")
+    [ -z "$why" ]
+}
+
 # TVhome's disk is case-sensitive, so a link must use each name's case on
 # disk, even where this computer's disk (a Mac's, usually) takes any case.
 
@@ -960,6 +1048,7 @@ case $cmd in
     shell) need_box; in_box bash -l ;;
     pages) cmd_pages "$@" ;;
     link) cmd_link "$@" ;;
+    decode-link) decode_link "${1:-}" && printf '%s\t%s\n' "$rel" "$isdir" || { echo "$why" >&2; exit 2; } ;;
     import-key) cmd_import_key "$@" ;;
     export-key) cmd_export_key "$@" ;;
     folder) need_config; say "$FOLDER" ;;

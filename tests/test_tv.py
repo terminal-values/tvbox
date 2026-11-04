@@ -1195,6 +1195,32 @@ def test_the_link_port_is_not_the_boxs_inner_port(box, tmp_path):
     assert res["port"]["status"] == "ok" and res["links"]["status"] == "ok", res
 
 
+# --- decoding links ---------------------------------------------------------
+
+LINKS = json.loads((ROOT / "tests" / "link_cases.json").read_text())
+
+
+@pytest.mark.parametrize("case", [c for c in CASES if "link" in c], ids=lambda c: c["path"] or "(folder)")
+def test_every_link_decodes_back(box, case):
+    box.configure()
+    r = box.tv("decode-link", case["link"])
+    assert (r.returncode, r.stdout) == (0, f'{case["path"]}\t{"1" if case["dir"] else ""}\n')
+
+
+@pytest.mark.parametrize("case", LINKS["decodes"], ids=lambda c: c["link"])
+def test_other_forms_decode(box, case):
+    box.configure()
+    r = box.tv("decode-link", case["link"])
+    assert (r.returncode, r.stdout) == (0, f'{case["path"]}\t{"1" if case["dir"] else ""}\n')
+
+
+@pytest.mark.parametrize("case", LINKS["refused_links"], ids=lambda c: c["link"])
+def test_bad_links_are_refused(box, case):
+    box.configure()
+    r = box.tv("decode-link", case["link"])
+    assert (r.returncode, r.stdout, r.stderr) == (2, "", case["refused"] + "\n")
+
+
 # --- tv link on a case-insensitive disk (a Mac's, usually) ---------------------
 
 # dash's pwd -P gives the case on disk; bash's (a Mac's /bin/sh) keeps the case
