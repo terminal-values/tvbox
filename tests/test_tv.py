@@ -1539,3 +1539,46 @@ def test_open_finds_a_decomposed_name(box):
     (folder / "doc" / "café.txt").write_text("x")
     r = box.tv("open", "--print", "tvhome://folder/doc/caf%C3%A9.txt")
     assert r.returncode == 0, r.stderr
+
+
+def test_open_print_refuses_a_symlink_out(box):
+    folder = openable(box)
+    (box.home / "outside").mkdir()
+    (box.home / "outside" / "b.txt").write_text("x")
+    (folder / "doc" / "away").symlink_to("../../outside")
+    r = box.tv("open", "--print", "tvhome://folder/doc/away/b.txt")
+    assert (r.returncode, r.stdout) == (2, "")
+    assert "outside the TVhome Folder" in r.stderr
+
+
+def test_open_print_says_a_missing_file_is_missing(box):
+    folder = openable(box)
+    r = box.tv("open", "--print", "tvhome://folder/doc/nope.txt")
+    assert (r.returncode, r.stdout) == (3, f"{folder}/doc/nope.txt\n")
+    assert "isn't on this computer yet" in r.stderr
+
+
+def test_open_resolves_dot_dot_on_disk_not_by_spelling(box):
+    folder = openable(box)
+    doc = folder / "doc"
+    (doc / "b" / "c").mkdir(parents=True)
+    (doc / "b" / "t.md").write_text("x")
+    (doc / "t.md").write_text("y")
+    (doc / "sym").symlink_to("b/c")
+    (doc / "lex").symlink_to("sym/../t.md")
+    opened = opener(box)
+    r = tv_on_a_terminal(box, "open", "tvhome://folder/doc/lex")
+    assert r.returncode == 0, r.stderr
+    want = os.path.realpath(doc / "lex")
+    assert want.endswith("doc/b/t.md")
+    assert opened.read_text() == want + "\n"
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="needs a normalization-insensitive disk")
+def test_open_opens_a_decomposed_name(box):
+    folder = openable(box)
+    (folder / "doc" / "cafe\u0301.txt").write_text("x")
+    opened = opener(box)
+    r = tv_on_a_terminal(box, "open", "tvhome://folder/doc/caf%C3%A9.txt")
+    assert r.returncode == 0, r.stderr
+    assert opened.read_text().strip().endswith(".txt")

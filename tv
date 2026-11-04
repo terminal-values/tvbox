@@ -712,7 +712,7 @@ decode_link() {
 
 # The physical path of directory $1, in the case on disk. bash's builtin pwd
 # (a Mac's /bin/sh) keeps the case typed; the pwd program asks the disk.
-physical_dir() { (cd "$1" 2>/dev/null && env pwd -P); }
+physical_dir() { (cd -P "$1" 2>/dev/null && env pwd -P); }
 
 # ls with nothing from the environment that changes what it prints: a Mac's
 # colours with CLICOLOR_FORCE, GNU's quoting with QUOTING_STYLE.
@@ -832,7 +832,6 @@ cmd_open() {
         esac
     fi
     logical=$FOLDER${rel:+/$rel}
-    if [ -n "$print" ]; then say "$logical"; return 0; fi
     root=$(physical_dir "$FOLDER") || die 2 "The TVhome Folder, $FOLDER, isn't there."
     resolved=$(real_path "$logical") || { say "$logical"
         die 3 "That file isn't on this computer yet. Syncthing may not have brought it, or it's been deleted."; }
@@ -841,6 +840,7 @@ cmd_open() {
         *) die 2 "That link leads outside the TVhome Folder." ;;
     esac
     say "$logical"
+    [ -z "$print" ] || return 0
     if runs_code "$resolved"; then
         die 1 "That runs code when opened, so tv open won't open it."
     fi
