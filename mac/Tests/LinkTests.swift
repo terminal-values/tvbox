@@ -187,15 +187,20 @@ import Testing
         let h = Self.here(TVLink.find(.init(path: "doc/caf\u{e9}.txt", isDirectory: false), folder: t.base + "/tv"))
         #expect(h != nil)
         #expect(h?.logical == Array((t.base + "/tv/doc/caf\u{e9}.txt").utf8))
+        // The disk's bytes survive: e + U+0301, not é.
+        #expect(h?.resolved == Array(Self.real(t.base + "/tv/doc/cafe\u{301}.txt").utf8))
+        #expect(h?.resolved.suffix(10) == Array("cafe\u{301}.txt".utf8)[...])
         #expect(h?.isDirectory == false)
     }
 
-    // A name that starts with a combining mark is inside the folder, not outside.
+    // A name that starts with a combining mark, right after root + "/": inside the
+    // folder. String.hasPrefix(root + "/") wrongly called this outside.
     @Test func aNameStartingWithACombiningMarkIsHere() {
         let t = Tree()
-        close(open(t.base + "/tv/doc/\u{301}x.txt", O_CREAT | O_WRONLY, 0o644))
-        let h = Self.here(TVLink.find(.init(path: "doc/\u{301}x.txt", isDirectory: false), folder: t.base + "/tv"))
-        #expect(h != nil)
+        close(open(t.base + "/tv/\u{301}x", O_CREAT | O_WRONLY, 0o644))
+        symlink("../\u{301}x", t.base + "/tv/doc/link")
+        let h = Self.here(TVLink.find(.init(path: "doc/link", isDirectory: false), folder: t.base + "/tv"))
+        #expect(h?.resolved == Array((Self.real(t.base + "/tv") + "/\u{301}x").utf8))
     }
 
     // The folder's own name followed by a combining mark is a different, outside, folder.
