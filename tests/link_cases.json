@@ -13,6 +13,7 @@
   {"path": ".stversions/doc/a.txt", "refused": "git"}
 ],
 "decodes": [
+  {"link": "tvhome://folder//", "path": "", "dir": true},
   {"link": "tvhome://folder/", "path": "", "dir": true},
   {"link": "tvhome://folder/doc/minutes/2026-10.md", "path": "doc/minutes/2026-10.md", "dir": false},
   {"link": "TVHOME://FOLDER/ledger/", "path": "ledger", "dir": true},

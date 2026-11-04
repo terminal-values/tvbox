@@ -131,3 +131,100 @@ enum TVLink {
         }
     }
 }
+
+/// Reading a link back into a path: the opposite of link(relative:), and tv's
+/// decode_link / real_path, pinned by the same tests/link_cases.json. Works on
+/// bytes with its own matching, not URLComponents, which decodes and
+/// normalises differently from tv.
+extension TVLink {
+    enum OpenRefusal: String, Error, Equatable {
+        case notALink = "not-a-link", traversal, nul, utf8, git, hidden, outside
+    }
+    struct Decoded: Equatable { var path: String; var isDirectory: Bool }
+    enum Found: Equatable {
+        /// logical: folder + "/" + path, as the member would browse to it.
+        /// resolved: realpath(3) of it, the file that gets checked and opened.
+        case here(logical: String, resolved: String, isDirectory: Bool)
+        case missing(logical: String)
+    }
+
+    /// Files that run code when opened, by extension (lower case, no dot).
+    static let runsCodeExtensions: Set<String> = [
+        "app", "command", "sh", "bash", "zsh", "py", "pl", "rb", "scpt", "workflow",
+        "terminal", "desktop", "jar", "exe", "bat",
+    ]
+
+    private static let prefixes = ["tvhome://folder/", "http://box.terminalvalues.org:8484/folder/"]
+
+    static func decode(_ link: String) -> Result<Decoded, OpenRefusal> {
+        var bytes = Array(link.utf8)
+        if let i = bytes.firstIndex(of: UInt8(ascii: "#")) { bytes.removeSubrange(i...) }
+        if let i = bytes.firstIndex(of: UInt8(ascii: "?")) { bytes.removeSubrange(i...) }
+        func lower(_ b: UInt8) -> UInt8 { (65...90).contains(b) ? b + 32 : b }
+        // Scheme and host in any case; in the http form "folder/" is a path, so exact.
+        guard let prefix = prefixes.map({ Array($0.utf8) }).first(where: { p in
+            let folded = p.first == UInt8(ascii: "h") ? p.count - 7 : p.count
+            return bytes.count >= p.count && zip(bytes, p).enumerated().allSatisfy { n, pair in
+                n < folded ? lower(pair.0) == pair.1 : pair.0 == pair.1
+            }
+        }) else { return .failure(.notALink) }
+        var rest = Array(bytes.dropFirst(prefix.count))
+        let isDirectory = rest.isEmpty || rest.last == UInt8(ascii: "/")
+        if rest.last == UInt8(ascii: "/") { rest.removeLast() }
+        if rest.isEmpty { return .success(Decoded(path: "", isDirectory: isDirectory)) }
+
+        func hex(_ b: UInt8) -> UInt8? {
+            switch b {
+            case 48...57: b - 48
+            case 65...70: b - 55
+            case 97...102: b - 87
+            default: nil
+            }
+        }
+        var notALink = false, traversal = false, nul = false
+        var out: [UInt8] = []
+        var component: [UInt8] = []
+        func endComponent() {
+            if component.isEmpty || component == [46] || component == [46, 46] { traversal = true }
+            component = []
+        }
+        var i = 0
+        while i < rest.count {
+            let b = rest[i]
+            if b == UInt8(ascii: "/") {
+                endComponent(); out.append(b); i += 1; continue
+            }
+            var v = b
+            if b == UInt8(ascii: "%") {
+                guard i + 2 < rest.count, let h = hex(rest[i + 1]), let l = hex(rest[i + 2]) else {
+                    notALink = true; i += 1; continue
+                }
+                v = h * 16 + l; i += 2
+                if v == UInt8(ascii: "/") { traversal = true }
+            }
+            if v == 0 { nul = true }
+            component.append(v); out.append(v); i += 1
+        }
+        endComponent()
+        if notALink { return .failure(.notALink) }
+        if traversal { return .failure(.traversal) }
+        if nul { return .failure(.nul) }
+        guard let path = String(validating: out, as: UTF8.self) else { return .failure(.utf8) }
+        if let r = refusal(path) { return .failure(r == .git ? .git : .hidden) }
+        return .success(Decoded(path: path, isDirectory: isDirectory))
+    }
+
+    /// Where the link points in this folder, as the disk has it: symlinks and
+    /// .. followed by realpath(3). A dangling symlink is missing. Only
+    /// .outside can fail; isDirectory comes from the disk, not the link.
+    static func find(_ decoded: Decoded, folder: String) -> Result<Found, OpenRefusal> {
+        let logical = decoded.path.isEmpty ? folder : folder + "/" + decoded.path
+        guard let resolved = realPath(logical) else { return .success(.missing(logical: logical)) }
+        guard let root = realPath(folder), resolved == root || resolved.hasPrefix(root + "/") else {
+            return .failure(.outside)
+        }
+        var st = stat()
+        let isDirectory = stat(resolved, &st) == 0 && st.st_mode & S_IFMT == S_IFDIR
+        return .success(.here(logical: logical, resolved: resolved, isDirectory: isDirectory))
+    }
+}
