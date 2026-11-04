@@ -46,7 +46,9 @@
   {"link": "tvhome://folder/doc/%ED%A0%80.txt", "refused": "utf8"},
   {"link": "tvhome://folder/TUTORIAL.md", "refused": "git"},
   {"link": "tvhome://folder/doc/CLAUDE.md", "refused": "git"},
-  {"link": "tvhome://folder/doc/.notes.txt", "refused": "hidden"}
+  {"link": "tvhome://folder/doc/.notes.txt", "refused": "hidden"},
+  {"link": "tvhome://folder/doc/secrets/%CC%81a", "refused": "git"},
+  {"link": "tvhome://folder/doc/.%CC%81x", "refused": "hidden"}
 ],
 "runs_code_extensions": ["app", "command", "sh", "bash", "zsh", "py", "pl", "rb", "scpt", "workflow", "terminal", "desktop", "jar", "exe", "bat"]
 }

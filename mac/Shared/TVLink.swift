@@ -69,13 +69,15 @@ enum TVLink {
     /// with a git-only name in it, hidden for a dot-name, nil if it links.
     private static func refusal(_ relative: String) -> Refusal? {
         guard !relative.isEmpty else { return nil }
-        let parts = relative.split(separator: "/", omittingEmptySubsequences: false)
-        guard synced.contains(String(parts[0])) else { return .git }
+        // Bytes, not Characters: a combining mark after "/" or "." must not
+        // change what a name is, and only ASCII folds, as tv's tr does.
+        let parts = relative.utf8.split(separator: UInt8(ascii: "/"), omittingEmptySubsequences: false)
+        guard let first = String(validating: parts[0], as: UTF8.self), synced.contains(first) else { return .git }
         var hidden = false
         for part in parts {
-            let lower = part.lowercased()
+            let lower = String(decoding: part.map { (65...90).contains($0) ? $0 + 32 : $0 }, as: UTF8.self)
             if gitNames.contains(lower) { return .git }
-            if lower.hasPrefix(".") { hidden = true }
+            if part.first == UInt8(ascii: ".") { hidden = true }
         }
         return hidden ? .hidden : nil
     }
@@ -220,7 +222,7 @@ extension TVLink {
     static func find(_ decoded: Decoded, folder: String) -> Result<Found, OpenRefusal> {
         let logical = decoded.path.isEmpty ? folder : folder + "/" + decoded.path
         guard let resolved = realPath(logical) else { return .success(.missing(logical: logical)) }
-        guard let root = realPath(folder), resolved == root || resolved.hasPrefix(root + "/") else {
+        guard let root = realPath(folder), resolved.utf8.elementsEqual(root.utf8) || resolved.utf8.starts(with: (root + "/").utf8) else {
             return .failure(.outside)
         }
         var st = stat()

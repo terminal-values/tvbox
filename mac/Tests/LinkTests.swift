@@ -126,11 +126,18 @@ import Testing
         let r = realpath(p, nil)!; defer { free(r) }; return String(cString: r)
     }
 
+    /// Swift's == treats canonically equivalent strings as equal, so compare bytes.
+    static func here(_ r: Result<TVLink.Found, TVLink.OpenRefusal>) -> (logical: [UInt8], resolved: [UInt8], isDirectory: Bool)? {
+        guard case .success(.here(let l, let r, let d)) = r else { return nil }
+        return (Array(l.utf8), Array(r.utf8), d)
+    }
+
     @Test func findsAFile() {
         let t = Tree()
-        #expect(TVLink.find(.init(path: "doc/alias.txt", isDirectory: false), folder: t.base + "/tv")
-            == .success(.here(logical: t.base + "/tv/doc/alias.txt",
-                              resolved: Self.real(t.base + "/tv/doc/a.txt"), isDirectory: false)))
+        let h = Self.here(TVLink.find(.init(path: "doc/alias.txt", isDirectory: false), folder: t.base + "/tv"))
+        #expect(h?.logical == Array((t.base + "/tv/doc/alias.txt").utf8))
+        #expect(h?.resolved == Array(Self.real(t.base + "/tv/doc/a.txt").utf8))
+        #expect(h?.isDirectory == false)
     }
 
     @Test func aFolderLinkWithoutItsSlash() {
@@ -177,10 +184,28 @@ import Testing
     @Test func aDecomposedNameIsFound() {
         let t = Tree()
         close(open(t.base + "/tv/doc/cafe\u{301}.txt", O_CREAT | O_WRONLY, 0o644))
-        guard case .success(.here(_, _, let isDir)) =
-            TVLink.find(.init(path: "doc/caf\u{e9}.txt", isDirectory: false), folder: t.base + "/tv")
-        else { Issue.record("not found"); return }
-        #expect(!isDir)
+        let h = Self.here(TVLink.find(.init(path: "doc/caf\u{e9}.txt", isDirectory: false), folder: t.base + "/tv"))
+        #expect(h != nil)
+        #expect(h?.logical == Array((t.base + "/tv/doc/caf\u{e9}.txt").utf8))
+        #expect(h?.isDirectory == false)
+    }
+
+    // A name that starts with a combining mark is inside the folder, not outside.
+    @Test func aNameStartingWithACombiningMarkIsHere() {
+        let t = Tree()
+        close(open(t.base + "/tv/doc/\u{301}x.txt", O_CREAT | O_WRONLY, 0o644))
+        let h = Self.here(TVLink.find(.init(path: "doc/\u{301}x.txt", isDirectory: false), folder: t.base + "/tv"))
+        #expect(h != nil)
+    }
+
+    // The folder's own name followed by a combining mark is a different, outside, folder.
+    @Test func aCombiningMarkAfterTheFolderNameIsOutside() {
+        let t = Tree()
+        mkdir(t.base + "/tv\u{301}", 0o755)
+        close(open(t.base + "/tv\u{301}/f", O_CREAT | O_WRONLY, 0o644))
+        symlink("../../tv\u{301}/f", t.base + "/tv/doc/sneaky")
+        let r = TVLink.find(.init(path: "doc/sneaky", isDirectory: false), folder: t.base + "/tv")
+        #expect(r == .failure(.outside))
     }
 
     @Test func readsTheFolderFromTvsConfig() {
