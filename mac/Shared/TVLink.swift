@@ -155,6 +155,7 @@ extension TVLink {
         "app", "command", "sh", "bash", "zsh", "py", "pl", "rb", "scpt", "workflow",
         "terminal", "desktop", "jar", "exe", "bat", "pkg", "mpkg", "prefpane", "saver", "fileloc",
         "inetloc", "webloc", "shortcut",
+        "tool", "term", "jnlp", "wflow", "scptd", "action", "deb", "rpm", "flatpakref", "appimage",
     ]
 
     private static let prefixes = ["tvhome://folder/", "http://box.terminalvalues.org:8484/folder/"]

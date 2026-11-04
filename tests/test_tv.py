@@ -1582,3 +1582,45 @@ def test_open_opens_a_decomposed_name(box):
     r = tv_on_a_terminal(box, "open", "tvhome://folder/doc/caf%C3%A9.txt")
     assert r.returncode == 0, r.stderr
     assert opened.read_text().strip().endswith(".txt")
+
+
+def test_open_fails_with_1_whatever_the_openers_status(box):
+    openable(box)
+    fake_tool(box, "xdg-open", "exit 3")
+    fake_tool(box, "open", "exit 3")
+    r = tv_on_a_terminal(box, "open", LINK)
+    assert r.returncode == 1 and "couldn't open it" in r.stderr
+
+
+@pytest.mark.parametrize("swap,status,words", [
+    ("code", 1, "runs code when opened"),
+    ("gone", 3, "isn't on this computer yet"),
+    ("outside", 2, "outside the TVhome Folder"),
+])
+def test_open_checks_again_after_the_answer(box, swap, status, words):
+    """The file changes while the question waits; the answer is y."""
+    folder = openable(box)
+    opened = opener(box)
+    target = folder / "doc" / "minutes" / "2026-10.md"
+    master, slave = os.openpty()
+    p = subprocess.Popen([SH, str(TV), "open", LINK], stdin=slave, stdout=subprocess.PIPE,
+                         stderr=subprocess.PIPE, text=True, env=box_env(box))
+    try:
+        got = b""
+        while b"Open it?" not in got:
+            got += os.read(p.stderr.fileno(), 1024)
+        target.unlink()
+        if swap == "code":
+            target.write_text("x")
+            target.chmod(0o755)
+        elif swap == "outside":
+            (box.home / "outside.md").write_text("x")
+            target.symlink_to(box.home / "outside.md")
+        os.write(master, b"y\n")
+        rest = p.stderr.read()
+        p.wait(timeout=10)
+    finally:
+        os.close(slave)
+        os.close(master)
+        p.kill()
+    assert p.returncode == status and words in rest and not opened.exists()
