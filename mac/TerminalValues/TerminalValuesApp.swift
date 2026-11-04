@@ -74,8 +74,58 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             _ = await moveBoxIfNeeded(model: model, pinned: model.pinned)
             model.startPolling()
         }
-        // Opened by hand (not at login): show the window.
-        if !atLogin { model.wantsWindow = true }
+        // Opened by hand (not at login, not to open a link): show the window.
+        let toOpenSomething = notification.userInfo?[NSApplication.launchIsDefaultUserInfoKey] as? Bool == false
+        if !atLogin && !toOpenSomething { model.wantsWindow = true }
+    }
+
+    /// Links waiting for their turn, and whether one is being handled. AppKit
+    /// can deliver the next URL while a dialog's runModal is up: that call
+    /// only queues, and the loop already running picks it up.
+    private var linkQueue: [URL] = []
+    private var handlingLinks = false
+
+    /// tvhome:// links, from a link page's "Open on this computer".
+    func application(_ application: NSApplication, open urls: [URL]) {
+        linkQueue += urls.filter { $0.scheme?.lowercased() == "tvhome" }
+        guard !handlingLinks else { return }
+        handlingLinks = true
+        while !linkQueue.isEmpty { handleLink(linkQueue.removeFirst().absoluteString) }
+        handlingLinks = false
+    }
+
+    /// Shows the member which file and app, then does what they choose.
+    private func handleLink(_ link: String) {
+        NSApp.activate()
+        let folder = Self.tvFolder()
+        var shown = answer(for: link, folder: folder)
+        while true {
+            let alert = NSAlert()
+            let words = shown.words
+            alert.messageText = words.title
+            alert.informativeText = words.detail
+            let buttons = shown.buttons
+            for button in buttons { alert.addButton(withTitle: button.title) }
+            let n = alert.runModal().rawValue - NSApplication.ModalResponse.alertFirstButtonReturn.rawValue
+            guard buttons.indices.contains(n) else { return }
+            switch afterChoice(buttons[n], on: shown, recheck: { answer(for: link, folder: Self.tvFolder()) }) {
+            case .open(let resolved), .openFolder(let resolved):
+                NSWorkspace.shared.open(URL(fileURLWithPath: resolved))
+                return
+            case .reveal(let logical):
+                NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: logical)])
+                return
+            case .show(let next): shown = next
+            case .nothing: return
+            }
+        }
+    }
+
+    /// The TVhome Folder, from tv's config; nil if this Mac hasn't joined.
+    private static func tvFolder() -> String? {
+        let config = FileManager.default.homeDirectoryForCurrentUser.appending(path: ".config/tv/config")
+        guard let text = try? String(contentsOf: config, encoding: .utf8) else { return nil }
+        return TVLink.folder(fromConfig: text)
     }
 
     /// Opened again while it runs (from Spotlight, Finder or Launchpad):

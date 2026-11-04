@@ -54,6 +54,10 @@ targets:
         # A menu bar app: no Dock icon; its window comes forward when opened.
         LSUIElement: true
         NSHumanReadableCopyright: "MIT licence"
+        # TVhome link pages' "Open on this computer" (tvhome://folder/PATH).
+        CFBundleURLTypes:
+          - CFBundleURLName: org.terminalvalues.tvhome
+            CFBundleURLSchemes: [tvhome]
     settings:
       base:
         PRODUCT_NAME: Terminal Values
