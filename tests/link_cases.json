@@ -11,4 +11,44 @@
   {"path": "users/sam/secrets/x.txt", "refused": "git"},
   {"path": "doc/.notes.txt", "refused": "hidden"},
   {"path": ".stversions/doc/a.txt", "refused": "git"}
-]}
+],
+"decodes": [
+  {"link": "tvhome://folder//", "path": "", "dir": true},
+  {"link": "tvhome://folder/", "path": "", "dir": true},
+  {"link": "tvhome://folder/doc/minutes/2026-10.md", "path": "doc/minutes/2026-10.md", "dir": false},
+  {"link": "TVHOME://FOLDER/ledger/", "path": "ledger", "dir": true},
+  {"link": "HTTP://Box.TerminalValues.ORG:8484/folder/ledger/", "path": "ledger", "dir": true},
+  {"link": "http://box.terminalvalues.org:8484/folder/doc/minutes/2026-10.md?raw", "path": "doc/minutes/2026-10.md", "dir": false},
+  {"link": "http://box.terminalvalues.org:8484/folder/doc/minutes/2026-10.md#top", "path": "doc/minutes/2026-10.md", "dir": false},
+  {"link": "tvhome://folder/users/sam/100%25_caf%c3%a9~v2.txt", "path": "users/sam/100%_café~v2.txt", "dir": false},
+  {"link": "tvhome://folder/doc/Board minutes.pdf", "path": "doc/Board minutes.pdf", "dir": false},
+  {"link": "tvhome://folder/users/sam/café.txt", "path": "users/sam/café.txt", "dir": false}
+],
+"refused_links": [
+  {"link": "https://box.terminalvalues.org:8484/folder/doc/a.txt", "refused": "not-a-link"},
+  {"link": "http://box.terminalvalues.org/folder/doc/a.txt", "refused": "not-a-link"},
+  {"link": "http://box.terminalvalues.org:8485/folder/doc/a.txt", "refused": "not-a-link"},
+  {"link": "http://evil.example/folder/doc/a.txt", "refused": "not-a-link"},
+  {"link": "http://sam@box.terminalvalues.org:8484/folder/doc/a.txt", "refused": "not-a-link"},
+  {"link": "http://box.terminalvalues.org:8484/Folder/doc/a.txt", "refused": "not-a-link"},
+  {"link": "tvhome://other/doc/a.txt", "refused": "not-a-link"},
+  {"link": "tvhome://folder/doc/a%2.txt", "refused": "not-a-link"},
+  {"link": "doc/a.txt", "refused": "not-a-link"},
+  {"link": "tvhome://folder/doc/../../.ssh/id_ed25519", "refused": "traversal"},
+  {"link": "tvhome://folder/doc/%2e%2e/%2E%2E/x", "refused": "traversal"},
+  {"link": "tvhome://folder/doc/..%2F..%2Fx", "refused": "traversal"},
+  {"link": "tvhome://folder/doc/./a.txt", "refused": "traversal"},
+  {"link": "tvhome://folder/doc//a.txt", "refused": "traversal"},
+  {"link": "tvhome://folder//etc/passwd", "refused": "traversal"},
+  {"link": "tvhome://folder/doc/a%00.txt", "refused": "nul"},
+  {"link": "tvhome://folder/doc/caf%C3.txt", "refused": "utf8"},
+  {"link": "tvhome://folder/doc/%C0%AE%C0%AE/x", "refused": "utf8"},
+  {"link": "tvhome://folder/doc/%ED%A0%80.txt", "refused": "utf8"},
+  {"link": "tvhome://folder/TUTORIAL.md", "refused": "git"},
+  {"link": "tvhome://folder/doc/CLAUDE.md", "refused": "git"},
+  {"link": "tvhome://folder/doc/.notes.txt", "refused": "hidden"},
+  {"link": "tvhome://folder/doc/secrets/%CC%81a", "refused": "git"},
+  {"link": "tvhome://folder/doc/.%CC%81x", "refused": "hidden"}
+],
+"runs_code_extensions": ["app", "command", "sh", "bash", "zsh", "py", "pl", "rb", "scpt", "workflow", "terminal", "desktop", "jar", "exe", "bat", "pkg", "mpkg", "prefpane", "saver", "fileloc", "inetloc", "webloc", "shortcut", "tool", "term", "jnlp", "wflow", "scptd", "action", "deb", "rpm", "flatpakref", "appimage"]
+}

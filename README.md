@@ -60,6 +60,7 @@ tv push                commits and the secrets store to TVhome
 tv git ... / tv passage ... / tv run CMD ...   in the box, in the folder
 tv pages [PAGE]        TVhome Pages, via 127.0.0.1:8484
 tv link PATH           a TVhome link for a file in the folder, to share in TV Signal (on a Mac, also copies it)
+tv open LINK           open your own copy of a TVhome link's file (--print: just its path)
 tv shell               a shell in the box
 tv export-key FILE     save a copy of your age key (readable only by you)
 tv import-key          bring one in (--replace to swap out a new one)

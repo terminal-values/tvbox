@@ -619,12 +619,100 @@ link_refusal() {
     [ -z "$hidden" ] || echo hidden
 }
 
+# Read a TVhome link back into a path in the folder: the opposite of tv link.
+# Accepts http://box.terminalvalues.org:PORT/folder/PATH and tvhome://folder/PATH
+# (scheme and host in any case; a query or fragment is ignored). On success it
+# returns 0 and sets rel (the decoded path, no leading or trailing /, empty for
+# the folder itself) and isdir (1 if the link ends in / or is the folder). On
+# refusal it returns 1 and sets why to one of not-a-link, traversal, nul, utf8,
+# git, hidden: the first that applies, in that order.
+decode_link() {
+    rel= isdir= why=
+    link=${1%%#*}; link=${link%%\?*}
+    lower=$(printf '%s' "$link" | LC_ALL=C tr 'A-Z' 'a-z')
+    case $lower in
+        tvhome://folder/*) skip=16 ;;
+        http://box.terminalvalues.org:8484/*) skip=34 ;;
+        *) why=not-a-link; return 1 ;;
+    esac
+    p=$link
+    while [ "$skip" -gt 0 ]; do p=${p#?}; skip=$((skip - 1)); done
+    case $lower in
+        http:*) case $p in /folder/*) p=${p#/folder/} ;; *) why=not-a-link; return 1 ;; esac ;;
+        *) ;;
+    esac
+    case $p in ''|*/) isdir=1 ;; esac
+    p=${p%/}
+    if [ -n "$p" ]; then
+        # One pass over the bytes: percent-decode each component, collecting
+        # faults. The answer is "ok" and the path as \ooo escapes for printf
+        # (no byte over 127 goes through awk's %c), or the first fault.
+        res=$(printf '%s' "$p" | od -An -v -tx1 | awk '
+            BEGIN { for (i = 0; i < 256; i++) hex[sprintf("%02x", i)] = i }
+            function isx(c) { return (c >= 48 && c <= 57) || (c >= 65 && c <= 70) || (c >= 97 && c <= 102) }
+            function xv(c) { return c <= 57 ? c - 48 : (c <= 70 ? c - 55 : c - 87) }
+            function endcomp() {
+                if (cl == 0 || (cl <= 2 && alldots)) trav = 1
+                dec[m++] = 47; cl = 0; alldots = 1
+            }
+            { for (i = 1; i <= NF; i++) b[n++] = hex[$i] }
+            END {
+                alldots = 1
+                for (i = 0; i < n; i++) {
+                    c = b[i]
+                    if (c == 47) { endcomp(); continue }
+                    if (c == 37) {
+                        if (i + 2 < n && isx(b[i+1]) && isx(b[i+2])) {
+                            v = xv(b[i+1]) * 16 + xv(b[i+2]); i += 2
+                            if (v == 47) trav = 1
+                        } else { nal = 1; continue }
+                    } else v = c
+                    if (v == 0) nul = 1
+                    if (v != 46) alldots = 0
+                    cl++; dec[m++] = v
+                }
+                endcomp(); m--
+                # strict UTF-8 over the decoded bytes
+                for (i = 0; i < m && !bad; i++) {
+                    c = dec[i]; k = 0; lo = 128; hi = 191
+                    if (c < 128) continue
+                    else if (c >= 194 && c <= 223) k = 1
+                    else if (c >= 224 && c <= 239) { k = 2; if (c == 224) lo = 160; if (c == 237) hi = 159 }
+                    else if (c >= 240 && c <= 244) { k = 3; if (c == 240) lo = 144; if (c == 244) hi = 143 }
+                    else { bad = 1; break }
+                    for (j = 1; j <= k; j++) {
+                        d = (i + j < m) ? dec[i+j] : -1
+                        if (d < lo || d > hi) { bad = 1; break }
+                        lo = 128; hi = 191
+                    }
+                    i += k
+                }
+                if (nal) print "not-a-link"
+                else if (trav) print "traversal"
+                else if (nul) print "nul"
+                else if (bad) print "utf8"
+                else {
+                    printf "ok"
+                    for (i = 0; i < m; i++) printf "\\%03o", dec[i]
+                    print ""
+                }
+            }')
+        case $res in
+            ok*) esc=${res#ok}
+                 rel=$(printf "$esc"; printf x); rel=${rel%x} ;;
+            *) why=$res; return 1 ;;
+        esac
+    fi
+    why=$(link_refusal "$rel")
+    [ -z "$why" ]
+}
+
 # TVhome's disk is case-sensitive, so a link must use each name's case on
 # disk, even where this computer's disk (a Mac's, usually) takes any case.
 
 # The physical path of directory $1, in the case on disk. bash's builtin pwd
 # (a Mac's /bin/sh) keeps the case typed; the pwd program asks the disk.
-physical_dir() { (cd "$1" 2>/dev/null && env pwd -P); }
+physical_dir() { (cd -P "$1" 2>/dev/null && env pwd -P); }
 
 # ls with nothing from the environment that changes what it prints: a Mac's
 # colours with CLICOLOR_FORCE, GNU's quoting with QUOTING_STYLE.
@@ -687,6 +775,96 @@ cmd_link() {
     if [ "$(uname)" = Darwin ] && command -v pbcopy >/dev/null 2>&1; then
         printf '%s' "$links" | pbcopy && say "(Copied to the clipboard.)" >&2
     fi
+}
+
+# The physical path of $1 with every symlink followed, files included: each hop
+# is read from where the link really is, so ../ in a link means what the disk
+# means. Fails if it's dangling or loops (more than 40 hops).
+real_path() {
+    p=$1; hops=0
+    while :; do
+        d=$(physical_dir "$(dirname "$p")") || return 1
+        p=$d/$(basename "$p")
+        [ -L "$p" ] || break
+        hops=$((hops + 1)); [ "$hops" -le 40 ] || return 1
+        t=$(readlink "$p") || return 1
+        case $t in /*) p=$t ;; *) p=$d/$t ;; esac
+    done
+    [ -e "$p" ] || return 1
+    if [ -d "$p" ]; then physical_dir "$p"; else printf '%s\n' "$p"; fi
+}
+
+# Files that run code when opened, by extension (lower case). One list.
+CODE_EXTENSIONS="app command sh bash zsh py pl rb scpt workflow terminal desktop jar exe bat pkg mpkg prefpane saver fileloc inetloc webloc shortcut tool term jnlp wflow scptd action deb rpm flatpakref appimage"
+
+# Would opening resolved path $1 run code? An executable file, or a name ending
+# in one of CODE_EXTENSIONS (an .app is a folder).
+runs_code() {
+    lower=$(printf '%s' "${1##*/}" | LC_ALL=C tr 'A-Z' 'a-z')
+    for ext in $CODE_EXTENSIONS; do
+        case $lower in *."$ext") return 0 ;; esac
+    done
+    if [ -f "$1" ]; then
+        case $(plain_ls -ld "$1" | cut -c4,7,10) in *[xst]*) return 0 ;; esac
+    fi
+    return 1
+}
+
+# tv open [--print] LINK: open your own copy of the file (or folder) a TVhome
+# link names. Needs no running box.
+cmd_open() {
+    need_config
+    print=
+    while [ $# -gt 0 ]; do
+        case $1 in
+            --print) print=1; shift ;;
+            --) shift; break ;;
+            *) break ;;
+        esac
+    done
+    [ $# -eq 1 ] || die 2 "Usage: tv open [--print] LINK"
+    if ! decode_link "$1"; then
+        case $why in
+            not-a-link) die 2 "That isn't a TVhome link." ;;
+            git) die 2 "That file travels by git, not Syncthing, so TVhome has no copy of it." ;;
+            hidden) die 2 "That file is hidden (its name starts with a dot), and TVhome doesn't serve hidden files." ;;
+            *) die 2 "That link doesn't name a file in the TVhome Folder." ;;
+        esac
+    fi
+    logical=$FOLDER${rel:+/$rel}
+    root=$(physical_dir "$FOLDER") || die 2 "The TVhome Folder, $FOLDER, isn't there."
+    open_check || exit $?
+    say "$logical"
+    [ -z "$print" ] || return 0
+    [ -t 0 ] || return 0
+    printf 'Your copy: %s\nOpen it? [y/N] ' "$logical" >&2
+    read -r answer || answer=
+    case $answer in y|Y|yes) ;; *) return 0 ;; esac
+    # The file may have changed while the question waited: check again.
+    open_check || exit $?
+    if [ "$(uname)" = Darwin ]; then opener=open; else opener=xdg-open; fi
+    command -v "$opener" >/dev/null 2>&1 || die 1 "There's nothing to open it with here (no $opener)."
+    # Whatever the opener's own status (xdg-open uses 2, 3 and 4), failure is 1.
+    "$opener" "$resolved" || die 1 "$opener couldn't open it."
+}
+
+# Resolve $logical to $resolved and say why not, returning tv open's exit
+# status, if it is gone (3), outside the folder (2) or would run code (1).
+# With --print the code check is skipped: nothing is opened.
+open_check() {
+    resolved=$(real_path "$logical") || { say "$logical"
+        echo "That file isn't on this computer yet. Syncthing may not have brought it, or it's been deleted." >&2
+        return 3; }
+    case $resolved in
+        "$root"|"$root"/*) ;;
+        *) echo "That link leads outside the TVhome Folder." >&2; return 2 ;;
+    esac
+    if [ -z "$print" ] && runs_code "$resolved"; then
+        say "$logical"
+        echo "That runs code when opened, so tv open won't open it." >&2
+        return 1
+    fi
+    return 0
 }
 
 cmd_pages() {
@@ -929,6 +1107,7 @@ tv: Terminal Values' box.
   tv passage ...   TV's shared secrets
   tv pages [PAGE]  open TVhome Pages (or one, by its path in www/)
   tv link PATH     print a TVhome link for a file in the folder (and copy it)
+  tv open LINK     open your own copy of a TVhome link's file (--print: just its path)
   tv shell         a shell in the box, in the TVhome Folder
   tv run CMD ...   run any command in the box, in the TVhome Folder
   tv import-key    bring in your saved age key (tv import-key < file)
@@ -960,6 +1139,8 @@ case $cmd in
     shell) need_box; in_box bash -l ;;
     pages) cmd_pages "$@" ;;
     link) cmd_link "$@" ;;
+    open) cmd_open "$@" ;;
+    decode-link) decode_link "${1:-}" && printf '%s\t%s\n' "$rel" "$isdir" || { echo "$why" >&2; exit 2; } ;;
     import-key) cmd_import_key "$@" ;;
     export-key) cmd_export_key "$@" ;;
     folder) need_config; say "$FOLDER" ;;
@@ -971,7 +1152,7 @@ case $cmd in
     help|-h|--help) usage ;;
     *)  # A near miss gets a suggestion: tv catchup, tv catch_up, tv Status.
         near=$(printf '%s' "$cmd" | tr 'A-Z_' 'a-z-')
-        for c in join start stop status stats identity doctor catch-up changes push git passage run shell pages link \
+        for c in join start stop status stats identity doctor catch-up changes push git passage run shell pages link open \
                  import-key export-key folder move update uninstall; do
             [ "$(printf '%s' "$c" | tr -d -)" = "$(printf '%s' "$near" | tr -d -)" ] && near=$c && break
             c=
