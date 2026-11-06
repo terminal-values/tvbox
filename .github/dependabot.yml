@@ -1,0 +1,14 @@
+# The workflows' actions are pinned to commit SHAs, so they don't move by
+# themselves. Once a month Dependabot opens one pull request moving every
+# pin that has a newer release, with the version in the comment beside it.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "Workflows:"
