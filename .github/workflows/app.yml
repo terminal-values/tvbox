@@ -3,10 +3,12 @@
 # Sparkle's feed, and this publishes them as the GitHub release, where the app
 # looks for updates (releases/latest/download/appcast.xml).
 #
-# Repository secrets: MAC_CERT_P12 (the Developer ID Application certificate
-# and key, base64), MAC_CERT_PASSWORD, NOTARY_KEY_P8 (base64), NOTARY_KEY_ID,
-# NOTARY_ISSUER_ID, SPARKLE_PRIVATE_KEY. Repository variables (not secret):
-# TEAM_ID, SPARKLE_PUBLIC_KEY.
+# Secrets, in the "release" environment, which only v* tags can use:
+# MAC_CERT_P12 (the Developer ID Application certificate and key, base64),
+# MAC_CERT_PASSWORD, NOTARY_KEY_P8 (base64), NOTARY_KEY_ID, NOTARY_ISSUER_ID,
+# SPARKLE_PRIVATE_KEY. Together they can ship an update to every member's
+# app, so no other workflow run can read them. Repository variables (not
+# secret): TEAM_ID, SPARKLE_PUBLIC_KEY.
 name: app
 on:
   push:
@@ -16,6 +18,7 @@ permissions:
 jobs:
   app:
     runs-on: macos-26
+    environment: release
     steps:
       - uses: actions/checkout@v4
         with:
