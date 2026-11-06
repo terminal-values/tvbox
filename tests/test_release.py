@@ -39,7 +39,8 @@ def test_the_dmg_is_signed_before_it_is_notarized():
     assert sign < text.index('notarize "$dmg"')
 
 
-# The build must be exactly the tagged commit.
+# Releases are made on Danny's Mac, where the signing keys stay; GitHub
+# holds none of them. So the build must be exactly the tagged commit.
 
 CREDS = {name: "x" for name in ["TEAM_ID", "NOTARY_KEY", "NOTARY_KEY_ID", "NOTARY_ISSUER",
                                 "SPARKLE_PUBLIC_KEY", "SPARKLE_PRIVATE_KEY_FILE", "SPARKLE_BIN"]}
@@ -106,3 +107,17 @@ def test_goes_on_from_the_tagged_commit(tmp_path):
     release_in(d, "1.0.0")
     assert (tmp_path / "reached-network").exists()
 
+
+def test_no_workflow_holds_signing_secrets():
+    # Only GitHub's own token, made for each run, to push the box image.
+    import re
+    for wf in (ROOT / ".github" / "workflows").glob("*.yml"):
+        assert set(re.findall(r"secrets\.(\w+)", wf.read_text())) <= {"GITHUB_TOKEN"}, wf.name
+
+
+def test_sparkles_tools_are_checked_and_match_the_app():
+    make = (ROOT / "Makefile").read_text()
+    project = (ROOT / "mac" / "project.yml").read_text()
+    assert "1a856d2a9edb8e628de88121d7be04cf0e2167f8641650b78fca00b14244cf27" in make
+    assert "shasum -a 256 -c" in make
+    assert "SPARKLE_VERSION = 2.10.1" in make and 'exactVersion: "2.10.1"' in project

@@ -114,8 +114,10 @@ make app-test    # the Mac app's tests (Xcode, and brew install xcodegen)
 make app         # builds it, unsigned, into mac/build
 ```
 
-Releases: a version tag runs `.github/workflows/app.yml`, which runs
-`mac/scripts/release.sh` (it lists the signing secrets it needs).
+Releases are made on the Mac that holds the signing keys, not on GitHub,
+which holds none of them: push the commit and its tag (`v0.1.0`), check out
+the tag, then `make app-release VERSION=0.1.0` (`mac/scripts/release.sh`
+lists the variables it needs) and `make app-publish VERSION=0.1.0`.
 
 Both runtimes are worth testing: `TV_RUNTIME=docker make box-test`.
 

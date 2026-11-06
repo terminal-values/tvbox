@@ -9,7 +9,7 @@ options:
 packages:
   Sparkle:
     url: https://github.com/sparkle-project/Sparkle
-    exactVersion: "2.10.1"  # the same as the release workflow's tools
+    exactVersion: "2.10.1"  # the same as the Makefile's SPARKLE_VERSION
   # Exactly 1.11.2: later versions need the Metal toolchain (1.12+) and run a
   # build plugin, their own code at build time (1.19+).
   SwiftTerm:
