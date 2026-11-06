@@ -1,8 +1,9 @@
 #!/bin/sh
 # mac/scripts/release.sh VERSION: Terminal Values.app built, signed with a
 # Developer ID, notarized, packed as a .dmg, with Sparkle's update feed.
-# GitHub Actions runs it on a version tag (.github/workflows/app.yml); it also
-# runs by hand on a Mac whose keychain has the signing identity. Needs:
+# It runs on the Mac whose keychain has the signing identity, from a checkout
+# of the version's tag (vVERSION), so the signing keys never leave that Mac.
+# make app-release runs it. Needs:
 #   TEAM_ID                     the Apple Developer team
 #   NOTARY_KEY                  App Store Connect API key (.p8 file) for notarytool,
 #   NOTARY_KEY_ID, NOTARY_ISSUER  and its ids
@@ -20,6 +21,14 @@ done
 [ -z "$missing" ] || { echo "release.sh: not set:$missing" >&2; exit 2; }
 
 cd "$(dirname "$0")/../.."
+# Exactly the tagged commit: the app pins the box image built from it, and
+# xcodegen takes every file in the source folders, committed or not.
+tagged=$(git rev-parse -q --verify "v$VERSION^{commit}" 2>/dev/null) ||
+    { echo "release.sh: no tag v$VERSION" >&2; exit 2; }
+[ "$tagged" = "$(git rev-parse HEAD)" ] ||
+    { echo "release.sh: this isn't v$VERSION; git checkout v$VERSION first" >&2; exit 2; }
+[ -z "$(git status --porcelain)" ] ||
+    { echo "release.sh: there are uncommitted changes; they'd be built into the app" >&2; exit 2; }
 OUT=mac/build/release
 rm -rf "$OUT" && mkdir -p "$OUT/feed"
 rev=$(git rev-parse HEAD)
