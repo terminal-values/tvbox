@@ -38,11 +38,16 @@ jobs:
           security import "$RUNNER_TEMP/cert.p12" -k "$kc" -P "$MAC_CERT_PASSWORD" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple: -s -k ci "$kc" >/dev/null
           rm "$RUNNER_TEMP/cert.p12"
+      # Its tools sign the update, so the download is checked against the
+      # digest GitHub gives for that release asset.
       - name: Sparkle's tools, the same version as the app's
         run: |
           mkdir -p "$RUNNER_TEMP/sparkle"
-          curl -fsSL https://github.com/sparkle-project/Sparkle/releases/download/2.10.1/Sparkle-2.10.1.tar.xz |
-            tar -xJ -C "$RUNNER_TEMP/sparkle"
+          curl -fsSL -o "$RUNNER_TEMP/sparkle.tar.xz" \
+            https://github.com/sparkle-project/Sparkle/releases/download/2.10.1/Sparkle-2.10.1.tar.xz
+          echo "1a856d2a9edb8e628de88121d7be04cf0e2167f8641650b78fca00b14244cf27  $RUNNER_TEMP/sparkle.tar.xz" |
+            shasum -a 256 -c -
+          tar -xJ -C "$RUNNER_TEMP/sparkle" -f "$RUNNER_TEMP/sparkle.tar.xz"
       - name: Build, sign, notarize, pack
         env:
           TEAM_ID: ${{ vars.TEAM_ID }}
