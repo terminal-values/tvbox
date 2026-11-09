@@ -16,7 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
       -o /etc/apt/sources.list.d/tailscale.list \
  && apt-get update && apt-get install -y --no-install-recommends \
       tailscale syncthing git make age openssh-client socat tree util-linux jq \
-      less nano procps \
+      less nano procps qrencode \
  && apt-get purge -y gnupg && apt-get autoremove -y \
  && rm -rf /var/lib/apt/lists/*
 
@@ -31,7 +31,7 @@ RUN git clone -q https://github.com/FiloSottile/passage /tmp/passage \
 COPY --from=uv /uv /uvx /usr/local/bin/
 
 COPY tvbox-init tvbox-user tvbox-configure tvbox-join tvbox-identity tvbox-status tvbox-doctor tvbox-pages \
-     tvbox-catch-up tvbox-push tvbox-import-key /usr/local/bin/
+     tvbox-catch-up tvbox-push tvbox-import-key tvbox-phone /usr/local/bin/
 COPY stignore /etc/tvbox/
 RUN chmod 755 /usr/local/bin/tvbox-* \
  && mkdir -p /state /home/tv/terminalvalues && chmod 1777 /state

@@ -171,6 +171,7 @@ def test_commands_need_a_running_box(box):
 @pytest.mark.parametrize("args,inside", [
     (["catch-up"], ["tvbox-catch-up"]),
     (["push"], ["tvbox-push"]),
+    (["phone", "--json"], ["tvbox-phone", "--json"]),
     (["git", "status", "--short"], ["git", "status", "--short"]),
     (["passage", "ls"], ["passage", "ls"]),
 ])
@@ -1624,3 +1625,11 @@ def test_open_checks_again_after_the_answer(box, swap, status, words):
         os.close(master)
         p.kill()
     assert p.returncode == status and words in rest and not opened.exists()
+
+
+def test_phone_needs_a_running_box(box):
+    box.runtimes("docker")
+    box.configure()
+    r = box.tv("phone", FAKE_STATE="stopped")
+    assert r.returncode == 3
+    assert "tv start" in r.stdout + r.stderr

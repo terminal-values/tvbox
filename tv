@@ -1103,6 +1103,7 @@ tv: Terminal Values' box.
   tv catch-up      bring the code and secrets up to date, showing code changes first
   tv changes       what tv catch-up would bring in, as JSON
   tv push          send your code commits and the secrets to TVhome
+  tv phone         pair your phone with TVhome, by QR code
   tv git ...       git, in the TVhome Folder, in the box
   tv passage ...   TV's shared secrets
   tv pages [PAGE]  open TVhome Pages (or one, by its path in www/)
@@ -1134,6 +1135,7 @@ case $cmd in
     catch-up) need_box; in_box tvbox-catch-up "$@" ;;
     changes) need_box; in_box tvbox-catch-up --changes "$@" ;;
     push) need_box; in_box tvbox-push ;;
+    phone) need_box; in_box tvbox-phone "$@" ;;
     git|passage) need_box; in_box "$cmd" "$@" ;;
     run) need_box; in_box "$@" ;;
     shell) need_box; in_box bash -l ;;
@@ -1152,7 +1154,7 @@ case $cmd in
     help|-h|--help) usage ;;
     *)  # A near miss gets a suggestion: tv catchup, tv catch_up, tv Status.
         near=$(printf '%s' "$cmd" | tr 'A-Z_' 'a-z-')
-        for c in join start stop status stats identity doctor catch-up changes push git passage run shell pages link open \
+        for c in join start stop status stats identity doctor catch-up changes push phone git passage run shell pages link open \
                  import-key export-key folder move update uninstall; do
             [ "$(printf '%s' "$c" | tr -d -)" = "$(printf '%s' "$near" | tr -d -)" ] && near=$c && break
             c=
