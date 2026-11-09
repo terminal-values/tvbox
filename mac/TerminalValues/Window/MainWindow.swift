@@ -21,6 +21,19 @@ struct MainWindow: View {
             }
         }
         .task { if model.status == nil { await walk.resume() } }
+        .sheet(isPresented: $reviewing) { ChangesSheet(model: model) }
+        .sheet(isPresented: $pairing) { PhoneSheet(tv: model.tv) }
+        // initial: true, because a window opened by the menu sees the flag
+        // already set, and onChange alone wouldn't fire for that.
+        .onChange(of: model.phoneRequested, initial: true) {
+            if model.phoneRequested { model.phoneRequested = false; pairing = true }
+        }
+        .onChange(of: model.updateRequested) {
+            if model.updateRequested { model.updateRequested = false; checkForUpdates() }
+        }
+        .onChange(of: model.reviewRequested, initial: true) {
+            if model.reviewRequested { model.reviewRequested = false; reviewing = true }
+        }
     }
 
     private var everyday: some View {
@@ -57,17 +70,6 @@ struct MainWindow: View {
         .frame(minHeight: 720)
         .onAppear { model.windowVisible(true) }
         .onDisappear { model.windowVisible(false) }
-        .sheet(isPresented: $reviewing) { ChangesSheet(model: model) }
-        .sheet(isPresented: $pairing) { PhoneSheet(tv: model.tv) }
-        .onChange(of: model.phoneRequested) {
-            if model.phoneRequested { model.phoneRequested = false; pairing = true }
-        }
-        .onChange(of: model.updateRequested) {
-            if model.updateRequested { model.updateRequested = false; checkForUpdates() }
-        }
-        .onChange(of: model.reviewRequested) {
-            if model.reviewRequested { model.reviewRequested = false; reviewing = true }
-        }
         .alert("Something went wrong", isPresented: .constant(model.lastError != nil)) {
             Button("OK") { model.lastError = nil }
         } message: { Text(model.lastError ?? "") }
