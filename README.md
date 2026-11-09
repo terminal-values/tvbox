@@ -57,6 +57,7 @@ tv stats / identity / changes / doctor   CPU and memory; the lines Danny needs;
                        what catch-up would bring; a check-up (--json for the app)
 tv catch-up            code and secrets up to date, code changes shown first
 tv push                commits and the secrets store to TVhome
+tv phone               pair your phone with TVhome: a QR code to scan (--json for the app)
 tv git ... / tv passage ... / tv run CMD ...   in the box, in the folder
 tv pages [PAGE]        TVhome Pages, via 127.0.0.1:8484
 tv link PATH           a TVhome link for a file in the folder, to share in TV Signal (on a Mac, also copies it)

@@ -42,7 +42,7 @@ import Testing
         #expect(name == "a.md"); #expect(shown == "doc/a.md"); #expect(app == "TextEdit")
         #expect(logical == t.path("doc/a.md"))
         #expect(resolved.hasSuffix("/tv/doc/a.md"))
-        #expect(a.buttons == [.open, .showInFinder, .cancel])
+        #expect(a.buttons == [.open, .showInFinder, .copyLink, .cancel])
     }
 
     @Test func aFolderOffersShow() {
@@ -51,7 +51,7 @@ import Testing
         #expect(name == "ledger")
         guard case .showFolder(let top, let logical) = answer(t, "") else { Issue.record("not showFolder"); return }
         #expect(top == "TVhome Folder"); #expect(logical == t.folder)
-        #expect(answer(t, "ledger/").buttons == [.showInFinder, .cancel])
+        #expect(answer(t, "ledger/").buttons == [.showInFinder, .copyLink, .cancel])
     }
 
     @Test(arguments: ["doc/run.sh", "doc/x.pdf", "doc/Thing.app/", "doc/go.command", "doc/job.PY",
@@ -60,7 +60,7 @@ import Testing
         let t = Tree()
         let a = answer(t, path)
         guard case .runsCode = a else { Issue.record("got \(a)"); return }
-        #expect(a.buttons == [.showInFinder, .cancel])
+        #expect(a.buttons == [.showInFinder, .copyLink, .cancel])
     }
 
     @Test func aPackageIsAFileNotAFolder() {
@@ -80,14 +80,14 @@ import Testing
         let a = answer(t, "doc/a.md", appName: { _ in nil })
         guard case .noApp(let name, let shown, _) = a else { Issue.record("got \(a)"); return }
         #expect(name == "a.md"); #expect(shown == "doc/a.md")
-        #expect(a.buttons == [.showInFinder, .cancel])
+        #expect(a.buttons == [.showInFinder, .copyLink, .cancel])
     }
 
     @Test func missingIsNotHereYet() {
         let t = Tree()
         let a = answer(t, "doc/nope.md")
         #expect(a == .notHereYet(name: "nope.md", shown: "doc/nope.md"))
-        #expect(a.buttons == [.ok])
+        #expect(a.buttons == [.copyLink, .ok])   // the link still works for others
     }
 
     @Test func badLinkIsRefused() {
@@ -106,6 +106,19 @@ import Testing
         let t = Tree()
         let a = answer(t, "doc/a.md", folder: .some(nil))
         #expect(a == .notJoined); #expect(a.buttons == [.ok])
+    }
+
+    /// Copy TVhome Link gives the shareable link, as tv link and the Finder make it.
+    @Test func copyGivesTheTVhomeLink() {
+        let t = Tree()
+        let paper = "tvhome://folder/doc/Board%20minutes%20%233%20%28draft%29%3F.pdf"
+        #expect(TerminalValues.afterChoice(.copyLink, on: answer(t, "doc/a.md"), link: paper, recheck: { .notJoined })
+                == .copy(link: "https://home.terminalvalues.org/#doc/Board%20minutes%20%233%20%28draft%29%3F.pdf"))
+        #expect(TerminalValues.afterChoice(.copyLink, on: answer(t, ""), link: "tvhome://folder/", recheck: { .notJoined })
+                == .copy(link: "https://home.terminalvalues.org/#"))
+        #expect(TerminalValues.afterChoice(.copyLink, on: answer(t, "ledger/"), link: "tvhome://folder/ledger/", recheck: { .notJoined })
+                == .copy(link: "https://home.terminalvalues.org/#ledger/"))
+        #expect(LinkButton.copyLink.title == "Copy TVhome Link")
     }
 
     @Test func afterChoice() {

@@ -1,9 +1,9 @@
 {"cases": [
-  {"path": "", "dir": true, "link": "http://box.terminalvalues.org:8484/folder/"},
-  {"path": "doc/minutes/2026-10.md", "dir": false, "link": "http://box.terminalvalues.org:8484/folder/doc/minutes/2026-10.md"},
-  {"path": "ledger", "dir": true, "link": "http://box.terminalvalues.org:8484/folder/ledger/"},
-  {"path": "doc/Board minutes #3 (draft)?.pdf", "dir": false, "link": "http://box.terminalvalues.org:8484/folder/doc/Board%20minutes%20%233%20%28draft%29%3F.pdf"},
-  {"path": "users/sam/100%_café~v2.txt", "dir": false, "link": "http://box.terminalvalues.org:8484/folder/users/sam/100%25_caf%C3%A9~v2.txt"},
+  {"path": "", "dir": true, "link": "https://home.terminalvalues.org/#"},
+  {"path": "doc/minutes/2026-10.md", "dir": false, "link": "https://home.terminalvalues.org/#doc/minutes/2026-10.md"},
+  {"path": "ledger", "dir": true, "link": "https://home.terminalvalues.org/#ledger/"},
+  {"path": "doc/Board minutes #3 (draft)?.pdf", "dir": false, "link": "https://home.terminalvalues.org/#doc/Board%20minutes%20%233%20%28draft%29%3F.pdf"},
+  {"path": "users/sam/100%_café~v2.txt", "dir": false, "link": "https://home.terminalvalues.org/#users/sam/100%25_caf%C3%A9~v2.txt"},
   {"path": "TUTORIAL.md", "refused": "git"},
   {"path": "src/terminalvalues/private.py", "refused": "git"},
   {"path": "doc/CLAUDE.md", "refused": "git"},
@@ -22,7 +22,14 @@
   {"link": "http://box.terminalvalues.org:8484/folder/doc/minutes/2026-10.md#top", "path": "doc/minutes/2026-10.md", "dir": false},
   {"link": "tvhome://folder/users/sam/100%25_caf%c3%a9~v2.txt", "path": "users/sam/100%_café~v2.txt", "dir": false},
   {"link": "tvhome://folder/doc/Board minutes.pdf", "path": "doc/Board minutes.pdf", "dir": false},
-  {"link": "tvhome://folder/users/sam/café.txt", "path": "users/sam/café.txt", "dir": false}
+  {"link": "tvhome://folder/users/sam/café.txt", "path": "users/sam/café.txt", "dir": false},
+  {"link": "https://home.terminalvalues.org/#doc/a.txt", "path": "doc/a.txt", "dir": false},
+  {"link": "HTTPS://Home.TerminalValues.ORG/#ledger/", "path": "ledger", "dir": true},
+  {"link": "https://home.terminalvalues.org/#doc/x.pdf?raw", "path": "doc/x.pdf", "dir": false},
+  {"link": "https://home.terminalvalues.org/", "path": "", "dir": true},
+  {"link": "https://home.terminalvalues.org/#", "path": "", "dir": true},
+  {"link": "http://folder.localhost:8484/folder/doc/a.txt", "path": "doc/a.txt", "dir": false},
+  {"link": "http://Folder.LocalHost:8484/folder/doc/a.txt#top", "path": "doc/a.txt", "dir": false}
 ],
 "refused_links": [
   {"link": "https://box.terminalvalues.org:8484/folder/doc/a.txt", "refused": "not-a-link"},
@@ -48,7 +55,15 @@
   {"link": "tvhome://folder/doc/CLAUDE.md", "refused": "git"},
   {"link": "tvhome://folder/doc/.notes.txt", "refused": "hidden"},
   {"link": "tvhome://folder/doc/secrets/%CC%81a", "refused": "git"},
-  {"link": "tvhome://folder/doc/.%CC%81x", "refused": "hidden"}
+  {"link": "tvhome://folder/doc/.%CC%81x", "refused": "hidden"},
+  {"link": "https://home.terminalvalues.org/#join=tskey-auth-FAKE", "refused": "not-a-link"},
+  {"link": "https://home.terminalvalues.org/folder/doc/a.txt", "refused": "not-a-link"},
+  {"link": "http://home.terminalvalues.org/#doc/a.txt", "refused": "not-a-link"},
+  {"link": "https://home.terminalvalues.org:8443/#doc/a.txt", "refused": "not-a-link"},
+  {"link": "https://home.terminalvalues.org.evil.example/#doc/a.txt", "refused": "not-a-link"},
+  {"link": "http://folder.localhost:8485/folder/doc/a.txt", "refused": "not-a-link"},
+  {"link": "http://folder.localhost:8484/doc/a.txt", "refused": "not-a-link"},
+  {"link": "https://home.terminalvalues.org/#doc/../../x", "refused": "traversal"}
 ],
 "runs_code_extensions": ["app", "command", "sh", "bash", "zsh", "py", "pl", "rb", "scpt", "workflow", "terminal", "desktop", "jar", "exe", "bat", "pkg", "mpkg", "prefpane", "saver", "fileloc", "inetloc", "webloc", "shortcut", "tool", "term", "jnlp", "wflow", "scptd", "action", "deb", "rpm", "flatpakref", "appimage"]
 }

@@ -19,6 +19,11 @@ struct MenuContent: View {
                     model.reviewRequested = true
                 }
             }
+            Button("Pair a Phone…") {
+                showWindow()
+                model.phoneRequested = true
+            }
+            .disabled(!model.isRunning)
             Divider()
         }
         Text(statusLine)

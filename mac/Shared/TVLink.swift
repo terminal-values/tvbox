@@ -4,7 +4,8 @@ import Foundation
 /// refusals, pinned by tests/link_cases.json. Pure logic, so the app and the
 /// Finder extension both compile it.
 enum TVLink {
-    static let base = "http://box.terminalvalues.org:8484/folder/"
+    /// TV's phone page, with the path after the #.
+    static let base = "https://home.terminalvalues.org/#"
 
     /// Why an item has no TVhome link: outside the folder; travelling by git,
     /// so TVhome has no copy; or hidden, which TVhome won't serve.
@@ -30,7 +31,7 @@ enum TVLink {
     static func link(relative: String, isDirectory: Bool) -> Result<String, Refusal> {
         if let refusal = refusal(relative) { return .failure(refusal) }
         var link = base + (relative.addingPercentEncoding(withAllowedCharacters: unencoded) ?? relative)
-        if isDirectory && !link.hasSuffix("/") { link += "/" }
+        if isDirectory && !link.hasSuffix("/") && !link.hasSuffix("#") { link += "/" }
         return .success(link)
     }
 
@@ -158,21 +159,43 @@ extension TVLink {
         "tool", "term", "jnlp", "wflow", "scptd", "action", "deb", "rpm", "flatpakref", "appimage",
     ]
 
-    private static let prefixes = ["tvhome://folder/", "http://box.terminalvalues.org:8484/folder/"]
+    /// A TVhome link's start: the path is the fragment after it.
+    private static let home = Array("https://home.terminalvalues.org/".utf8)
+    /// The other forms, whose query and fragment are ignored: the Mac app's
+    /// own, a computer's address after the page, and old links.
+    private static let prefixes = ["tvhome://folder/", "http://folder.localhost:8484/folder/",
+                                   "http://box.terminalvalues.org:8484/folder/"]
 
     static func decode(_ link: String) -> Result<Decoded, OpenRefusal> {
-        var bytes = Array(link.utf8)
-        if let i = bytes.firstIndex(of: UInt8(ascii: "#")) { bytes.removeSubrange(i...) }
-        if let i = bytes.firstIndex(of: UInt8(ascii: "?")) { bytes.removeSubrange(i...) }
+        let all = Array(link.utf8)
         func lower(_ b: UInt8) -> UInt8 { (65...90).contains(b) ? b + 32 : b }
-        // Scheme and host in any case; in the http form "folder/" is a path, so exact.
-        guard let prefix = prefixes.map({ Array($0.utf8) }).first(where: { p in
-            let folded = p.first == UInt8(ascii: "h") ? p.count - 7 : p.count
-            return bytes.count >= p.count && zip(bytes, p).enumerated().allSatisfy { n, pair in
+        // The first `folded` bytes in any case, the rest exact.
+        func starts(_ bytes: [UInt8], _ p: [UInt8], folded: Int) -> Bool {
+            bytes.count >= p.count && zip(bytes, p).enumerated().allSatisfy { n, pair in
                 n < folded ? lower(pair.0) == pair.1 : pair.0 == pair.1
             }
-        }) else { return .failure(.notALink) }
-        var rest = Array(bytes.dropFirst(prefix.count))
+        }
+        var rest: [UInt8]
+        if starts(all, home, folded: home.count) {
+            rest = Array(all.dropFirst(home.count))
+            if !rest.isEmpty {
+                guard rest.first == UInt8(ascii: "#") else { return .failure(.notALink) }
+                rest.removeFirst()
+                if let i = rest.firstIndex(of: UInt8(ascii: "#")) { rest.removeSubrange(i...) }
+                if let i = rest.firstIndex(of: UInt8(ascii: "?")) { rest.removeSubrange(i...) }
+                // A pairing link holds a key; it's never a path.
+                if rest.starts(with: Array("join=".utf8)) { return .failure(.notALink) }
+            }
+        } else {
+            var bytes = all
+            if let i = bytes.firstIndex(of: UInt8(ascii: "#")) { bytes.removeSubrange(i...) }
+            if let i = bytes.firstIndex(of: UInt8(ascii: "?")) { bytes.removeSubrange(i...) }
+            // Scheme and host in any case; in the http forms "folder/" is a path, so exact.
+            guard let prefix = prefixes.map({ Array($0.utf8) }).first(where: { p in
+                starts(bytes, p, folded: p.first == UInt8(ascii: "h") ? p.count - 7 : p.count)
+            }) else { return .failure(.notALink) }
+            rest = Array(bytes.dropFirst(prefix.count))
+        }
         let isDirectory = rest.isEmpty || rest.last == UInt8(ascii: "/")
         if rest.last == UInt8(ascii: "/") { rest.removeLast() }
         if rest.isEmpty { return .success(Decoded(path: "", isDirectory: isDirectory)) }

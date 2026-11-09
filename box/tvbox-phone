@@ -1,0 +1,59 @@
+#!/bin/sh
+# Pair a phone with TVhome: ask TVhome's pairing service, over the tailnet,
+# for a ten-minute single-use key, and show it as a QR code for the phone's
+# camera. The key is never printed as text and never written to a file.
+# With --json (for the Mac app): {"url": ..., "expires": ...} instead.
+set -u
+. "${TVBOX_ENV:-/state/tvhome.env}"
+BASE=https://home.terminalvalues.org
+json=no
+while [ $# -gt 0 ]; do
+    case $1 in
+        --json) json=yes ;;
+        --base) shift; BASE=${1:-$BASE} ;;
+        *) echo "tvbox-phone: unknown option $1" >&2; exit 2 ;;
+    esac
+    shift
+done
+
+fail() { echo "$*" >&2; exit 1; }
+
+# The body, a newline, then the HTTP status.
+reply=$(curl -sS --max-time 40 --socks5-hostname 127.0.0.1:1055 -X POST \
+    -w '\n%{http_code}' "http://$TVHOME_HOST:8081/phone-key" 2>/dev/null) ||
+    fail "Couldn't reach TVhome's pairing service. Is the box on TV's tailnet? (tv status)"
+code=${reply##*
+}
+body=${reply%
+*}
+
+case $code in
+    200) ;;
+    403) fail "TVhome won't pair a phone for this box: $(printf '%s' "$body" | jq -r '.error // "no reason given"' 2>/dev/null)" ;;
+    429) secs=$(printf '%s' "$body" | jq -r '.retry // 0' 2>/dev/null)
+         case $secs in ''|*[!0-9]*) secs=0 ;; esac
+         mins=$(( (secs + 59) / 60 ))
+         case $mins in 0) when="a minute" ;; 1) when="1 minute" ;; *) when="$mins minutes" ;; esac
+         fail "You've paired a lot of phones this hour; try again in $when" ;;
+    502) fail "TVhome couldn't make a key just now; try again in a minute" ;;
+    *)   fail "Couldn't reach TVhome's pairing service. Is the box on TV's tailnet? (tv status)" ;;
+esac
+
+key=$(printf '%s' "$body" | jq -r '.key // empty' 2>/dev/null)
+expires=$(printf '%s' "$body" | jq -r '.expires // 600' 2>/dev/null)
+[ -n "$key" ] || fail "TVhome couldn't make a key just now; try again in a minute"
+url="$BASE/#join=$key"
+
+if [ "$json" = yes ]; then
+    jq -n --arg url "$url" --argjson expires "${expires:-600}" '{url: $url, expires: $expires}'
+    exit 0
+fi
+
+qrencode -t ANSIUTF8 -m 2 "$url" || fail "qrencode failed"
+cat <<'TEXT'
+Scan this with your phone's camera and open the link. It works for ten
+minutes, for one phone.
+Pair in the browser your links open in. On an iPhone, use Safari or
+Firefox; Brave doesn't keep the pairing working yet.
+Don't add the page to your home screen: it wouldn't see the pairing.
+TEXT

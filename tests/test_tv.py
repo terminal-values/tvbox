@@ -171,6 +171,7 @@ def test_commands_need_a_running_box(box):
 @pytest.mark.parametrize("args,inside", [
     (["catch-up"], ["tvbox-catch-up"]),
     (["push"], ["tvbox-push"]),
+    (["phone", "--json"], ["tvbox-phone", "--json"]),
     (["git", "status", "--short"], ["git", "status", "--short"]),
     (["passage", "ls"], ["passage", "ls"]),
 ])
@@ -178,7 +179,7 @@ def test_commands_exec_in_box(box, args, inside):
     box.runtimes("docker")
     box.configure()
     box.tv(*args, FAKE_STATE="running")
-    ex = box.call("exec")
+    ex = [c for c in box.calls() if len(c) > 1 and c[1] == "exec"][-1]
     assert ex[-len(inside):] == inside
     assert ex[ex.index("-w") + 1] == "/home/tv/terminalvalues"
     assert ex[ex.index("-u") + 1] == f"{os.getuid()}:{os.getgid()}"
@@ -936,14 +937,19 @@ def test_doctor_all_ok(box):
 
 
 @pytest.mark.parametrize("fake,status,words", [
-    ("ok", "ok", "open"), ("unresolved", "warning", "router"),
-    ("elsewhere", "warning", "router"), ("down", "warning", "don't answer")])
+    ("ok", "ok", "TVhome links open on this computer."),
+    ("down", "warning", "TVhome links don't answer through the box (got 000)."),
+    ("refused", "warning", "TVhome links don't answer through the box (got 403).")])
 def test_doctor_checks_links(box, fake, status, words):
+    # Through folder.localhost, which browsers keep on this computer whatever
+    # DNS says, so there's no DNS or router to blame any more.
     updatable(box, revision=NEW)
     box.configure(IMAGE="ghcr.io/terminal-values/tvbox@sha256:abc", REVISION=NEW)
     res = doctor_json(box, FAKE_STATE="running", FAKE_EXEC_OUT=BOX_DOCTOR, FAKE_LINKS=fake)
-    assert res["links"]["status"] == status and words in res["links"]["message"]
-    assert "127.0.0.1" not in res["links"]["message"]  # the name's DNS value isn't spelled out
+    assert (res["links"]["status"], res["links"]["message"]) == (status, words)
+    curl = [c for c in box.calls() if c[0] == "curl" and "http://folder.localhost:8484/folder/" in c]
+    assert curl and "--resolve" in curl[0] and "folder.localhost:8484:127.0.0.1" in curl[0]
+    assert "--noproxy" in curl[0]
 
 
 def test_doctor_links_check_ignores_a_proxy(box):
@@ -1118,14 +1124,14 @@ def test_link_takes_relative_paths_with_dot_dot(box):
     folder = linkable(box)
     r = subprocess.run([SH, str(TV), "link", "../doc/minutes/2026-10.md"], cwd=folder / "users",
                        capture_output=True, text=True, env=box_env(box))
-    assert r.stdout.endswith("/folder/doc/minutes/2026-10.md\n")
+    assert r.stdout.endswith("#doc/minutes/2026-10.md\n")
 
 
 def test_link_through_a_symlinked_folder(box):
     folder = linkable(box)
     (box.home / "tvlink").symlink_to(folder)
     r = box.tv("link", str(box.home / "tvlink" / "doc" / "minutes" / "2026-10.md"))
-    assert r.returncode == 0 and r.stdout.endswith("/folder/doc/minutes/2026-10.md\n")
+    assert r.returncode == 0 and r.stdout.endswith("#doc/minutes/2026-10.md\n")
 
 
 @pytest.mark.parametrize("where", ["terminalvalues2/doc/a.txt", "elsewhere.txt"])
@@ -1148,8 +1154,8 @@ def test_link_on_a_mac_copies_it(box):
     folder = linkable(box)
     fake_tool(box, "pbcopy", f'#!/bin/sh\ncat > {box.tmp}/clip\n')
     r = box.tv("link", str(folder / "ledger"), FAKE_UNAME="Darwin")
-    assert (box.tmp / "clip").read_text() == "http://box.terminalvalues.org:8484/folder/ledger/"
-    assert "clipboard" in r.stderr and r.stdout.strip().endswith("/ledger/")
+    assert (box.tmp / "clip").read_text() == "https://home.terminalvalues.org/#ledger/"
+    assert "clipboard" in r.stderr and r.stdout.strip().endswith("#ledger/")
 
 
 def test_link_needs_no_box(box):
@@ -1164,7 +1170,7 @@ def test_link_takes_a_name_starting_with_a_dash(box):
         r = subprocess.run([SH, str(TV), "link", *args], cwd=folder / "doc",
                            capture_output=True, text=True, env=box_env(box))
         assert r.returncode == 0, r.stderr
-        assert r.stdout.endswith("/folder/doc/-dash.txt\n")
+        assert r.stdout.endswith("#doc/-dash.txt\n")
 
 
 def test_link_with_only_a_double_dash_is_a_usage_error(box):
@@ -1176,7 +1182,7 @@ def test_link_with_only_a_double_dash_is_a_usage_error(box):
 
 
 def test_the_link_port_is_not_the_boxs_inner_port(box, tmp_path):
-    """Links name 8484 on this computer, whatever port the box uses inside."""
+    """Links and the port published on this computer don't follow the box's inner port."""
     other = tmp_path / "tv-inner-9000"
     other.write_text(TV.read_text().replace("\nINNER_PORT=8484", "\nINNER_PORT=9000", 1))
     assert other.read_text() != TV.read_text()
@@ -1188,7 +1194,7 @@ def test_the_link_port_is_not_the_boxs_inner_port(box, tmp_path):
         return subprocess.run([SH, str(other), *args], capture_output=True, text=True,
                               env={**box_env(box), **env})
     r = tv("link", str(folder / "ledger"))
-    assert r.stdout == "http://box.terminalvalues.org:8484/folder/ledger/\n", r.stderr
+    assert r.stdout == "https://home.terminalvalues.org/#ledger/\n", r.stderr
     tv("start")
     assert "127.0.0.1:8484:9000" in box.call("run")
     r = tv("doctor", "--json", FAKE_STATE="running", FAKE_EXEC_OUT=BOX_DOCTOR)
@@ -1266,14 +1272,14 @@ def link_in(box, shell, cwd, *args, **env):
 def test_link_uses_the_case_on_disk(box, mixed_case, shell, typed, want):
     r = link_in(box, shell, mixed_case, typed)
     assert r.returncode == 0, r.stderr
-    assert r.stdout == "http://box.terminalvalues.org:8484/folder/" + want + "\n"
+    assert r.stdout == "https://home.terminalvalues.org/#" + want + "\n"
 
 
 @pytest.mark.parametrize("shell", SHELLS)
 def test_link_from_a_cwd_typed_in_another_case(box, mixed_case, shell):
     cwd = str(mixed_case).replace("terminalvalues", "TerminalValues")
     r = link_in(box, shell, cwd, "doc/board/oct.md")
-    assert r.stdout.endswith("/folder/doc/Board/Oct.md\n"), r.stderr
+    assert r.stdout.endswith("#doc/Board/Oct.md\n"), r.stderr
 
 
 @pytest.mark.parametrize("shell", SHELLS)
@@ -1281,7 +1287,7 @@ def test_link_with_the_folder_configured_in_another_case(box, mixed_case, shell)
     box.configure(FOLDER=str(mixed_case).replace("terminalvalues", "TERMINALVALUES"))
     r = link_in(box, shell, mixed_case, str(mixed_case / "doc" / "board" / "oct.md"))
     assert r.returncode == 0, r.stderr
-    assert r.stdout.endswith("/folder/doc/Board/Oct.md\n")
+    assert r.stdout.endswith("#doc/Board/Oct.md\n")
 
 
 def ls_colours(tmp):
@@ -1304,7 +1310,7 @@ def test_link_ignores_a_colouring_ls(box, tmp_path):
     run.write_text("x")
     run.chmod(0o755)
     r = box.tv("link", str(run), CLICOLOR="1", CLICOLOR_FORCE="1", TERM="xterm-256color")
-    assert r.stdout == "http://box.terminalvalues.org:8484/folder/doc/Run.sh\n", r.stderr
+    assert r.stdout == "https://home.terminalvalues.org/#doc/Run.sh\n", r.stderr
 
 
 
@@ -1312,7 +1318,7 @@ def test_link_ignores_a_colouring_ls(box, tmp_path):
 def test_link_prefers_the_name_typed_over_a_hard_link(box, mixed_case, shell):
     os.link(mixed_case / "doc" / "Board" / "Oct.md", mixed_case / "doc" / "Board" / "Aardvark.md")
     r = link_in(box, shell, mixed_case, "doc/board/oct.md")
-    assert r.stdout.endswith("/folder/doc/Board/Oct.md\n"), r.stdout + r.stderr
+    assert r.stdout.endswith("#doc/Board/Oct.md\n"), r.stdout + r.stderr
 
 
 # --- tv open ------------------------------------------------------------------
@@ -1367,6 +1373,14 @@ def test_open_refuses_bad_links(box, case):
     r = box.tv("open", case["link"])
     assert (r.returncode, r.stdout) == (2, "")
     assert REASONS[case["refused"]] in r.stderr
+
+
+def test_open_never_echoes_a_pairing_link(box):
+    # A #join= link holds a key: refused, and never repeated back.
+    openable(box)
+    r = box.tv("open", "--print", "https://home.terminalvalues.org/#join=tskey-auth-SECRETKEY")
+    assert r.returncode == 2
+    assert "SECRETKEY" not in r.stdout + r.stderr
 
 
 def test_open_refuses_raw_bad_bytes_quietly(box):
@@ -1624,3 +1638,21 @@ def test_open_checks_again_after_the_answer(box, swap, status, words):
         os.close(master)
         p.kill()
     assert p.returncode == status and words in rest and not opened.exists()
+
+
+def test_phone_on_a_box_from_before_it(box):
+    # The app updates itself before the box does: say so, not the runtime's error.
+    box.runtimes("docker")
+    box.configure()
+    r = box.tv("phone", "--json", FAKE_STATE="running", FAKE_EXEC_FAILS="1")
+    assert r.returncode == 1
+    assert "tv update" in r.stderr
+    assert not [c for c in box.calls() if c[-1:] == ["tvbox-phone"] or c[-2:] == ["tvbox-phone", "--json"]]
+
+
+def test_phone_needs_a_running_box(box):
+    box.runtimes("docker")
+    box.configure()
+    r = box.tv("phone", FAKE_STATE="stopped")
+    assert r.returncode == 3
+    assert "tv start" in r.stdout + r.stderr
