@@ -37,6 +37,7 @@ final class AppModel {
     var wantsWindow = false
     /// Asked for from elsewhere (the Doctor): the review sheet, an update.
     var reviewRequested = false
+    var phoneRequested = false
     var updateRequested = false
     var lastError: String?
 

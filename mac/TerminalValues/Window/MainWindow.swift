@@ -9,6 +9,7 @@ struct MainWindow: View {
     var canUpdate = false
     var checkForUpdates: () -> Void = {}
     @State private var reviewing = false
+    @State private var pairing = false
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
@@ -57,6 +58,10 @@ struct MainWindow: View {
         .onAppear { model.windowVisible(true) }
         .onDisappear { model.windowVisible(false) }
         .sheet(isPresented: $reviewing) { ChangesSheet(model: model) }
+        .sheet(isPresented: $pairing) { PhoneSheet(tv: model.tv) }
+        .onChange(of: model.phoneRequested) {
+            if model.phoneRequested { model.phoneRequested = false; pairing = true }
+        }
         .onChange(of: model.updateRequested) {
             if model.updateRequested { model.updateRequested = false; checkForUpdates() }
         }
