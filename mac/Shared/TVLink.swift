@@ -167,8 +167,10 @@ extension TVLink {
                                    "http://box.terminalvalues.org:8484/folder/"]
 
     static func decode(_ link: String) -> Result<Decoded, OpenRefusal> {
-        let all = Array(link.utf8)
+        var all = Array(link.utf8)
         func lower(_ b: UInt8) -> UInt8 { (65...90).contains(b) ? b + 32 : b }
+        // The bare name, typed without its slash, is the folder.
+        if all.map(lower) == Array(home.dropLast()) { all.append(UInt8(ascii: "/")) }
         // The first `folded` bytes in any case, the rest exact.
         func starts(_ bytes: [UInt8], _ p: [UInt8], folded: Int) -> Bool {
             bytes.count >= p.count && zip(bytes, p).enumerated().allSatisfy { n, pair in

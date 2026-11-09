@@ -542,7 +542,10 @@ cmd_doctor() {
     else
         # As a link does: the page sends a computer to folder.localhost, which
         # browsers keep on this computer whatever DNS says, so curl is told
-        # the same. Never through a proxy: it has to reach this computer's box.
+        # the same. That makes this a check of the box and TVhome, not of the
+        # browser: one that sent *.localhost to DNS would still fail (Chrome,
+        # Firefox and Safari don't). Never through a proxy: it has to reach
+        # this computer's box.
         got=$(curl -s --noproxy '*' --resolve "folder.localhost:$LINK_PORT:127.0.0.1" -o /dev/null \
             -w '%{http_code}' --max-time 10 "http://folder.localhost:$LINK_PORT/folder/" 2>/dev/null) && rc=0 || rc=$?
         code=${got%% *}
@@ -634,7 +637,10 @@ link_refusal() {
 # git, hidden: the first that applies, in that order.
 decode_link() {
     rel= isdir= why=
-    case $(printf '%s' "$1" | LC_ALL=C tr 'A-Z' 'a-z') in
+    whole=$(printf '%s' "$1" | LC_ALL=C tr 'A-Z' 'a-z')
+    # The bare name, typed without its slash, is the folder.
+    if [ "$whole" = https://home.terminalvalues.org ]; then set -- "$1/"; whole=$whole/; fi
+    case $whole in
         https://home.terminalvalues.org/*)
             p=$1 skip=32
             while [ "$skip" -gt 0 ]; do p=${p#?}; skip=$((skip - 1)); done
