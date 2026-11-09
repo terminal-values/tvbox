@@ -19,7 +19,7 @@ done
 fail() { echo "$*" >&2; exit 1; }
 
 # The body, a newline, then the HTTP status.
-reply=$(curl -sS --max-time 35 --socks5-hostname 127.0.0.1:1055 -X POST \
+reply=$(curl -sS --max-time 40 --socks5-hostname 127.0.0.1:1055 -X POST \
     -w '\n%{http_code}' "http://$TVHOME_HOST:8081/phone-key" 2>/dev/null) ||
     fail "Couldn't reach TVhome's pairing service. Is the box on TV's tailnet? (tv status)"
 code=${reply##*
@@ -31,7 +31,10 @@ case $code in
     200) ;;
     403) fail "TVhome won't pair a phone for this box: $(printf '%s' "$body" | jq -r '.error // "no reason given"' 2>/dev/null)" ;;
     429) secs=$(printf '%s' "$body" | jq -r '.retry // 0' 2>/dev/null)
-         fail "You've paired a lot of phones this hour; try again in $(( (${secs:-0} + 59) / 60 )) minutes" ;;
+         case $secs in ''|*[!0-9]*) secs=0 ;; esac
+         mins=$(( (secs + 59) / 60 ))
+         case $mins in 0) when="a minute" ;; 1) when="1 minute" ;; *) when="$mins minutes" ;; esac
+         fail "You've paired a lot of phones this hour; try again in $when" ;;
     502) fail "TVhome couldn't make a key just now; try again in a minute" ;;
     *)   fail "Couldn't reach TVhome's pairing service. Is the box on TV's tailnet? (tv status)" ;;
 esac

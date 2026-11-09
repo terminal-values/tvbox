@@ -82,6 +82,16 @@ def test_base(phone):
      "You've paired a lot of phones this hour; try again in 25 minutes"),
     ("429", {"error": "slow down", "retry": 61},
      "You've paired a lot of phones this hour; try again in 2 minutes"),
+    ("429", {"error": "slow down", "retry": 30},
+     "You've paired a lot of phones this hour; try again in 1 minute"),
+    ("429", {"error": "slow down", "retry": 600},
+     "You've paired a lot of phones this hour; try again in 10 minutes"),
+    ("429", {"error": "slow down", "retry": 0},
+     "You've paired a lot of phones this hour; try again in a minute"),
+    ("429", {"error": "slow down"},
+     "You've paired a lot of phones this hour; try again in a minute"),
+    ("429", {"error": "slow down", "retry": "soon"},
+     "You've paired a lot of phones this hour; try again in a minute"),
     ("502", {"error": "upstream"}, "TVhome couldn't make a key just now; try again in a minute"),
 ])
 def test_service_error(phone, code, body, want):
@@ -100,6 +110,6 @@ def test_unreachable(phone):
 
 
 def test_client_outwaits_the_server(phone):
-    # The service may take a token and a key at 15 s each; the client waits longer.
-    phone()
-    assert "--max-time 35" in (phone().log / "curl").read_text()
+    # The service may take 5 s for whois and 15 s each for a token and a key;
+    # the client waits longer, and the Mac app (45 s) longer still.
+    assert "--max-time 40" in (phone().log / "curl").read_text()

@@ -59,6 +59,9 @@ func qrImage(for text: String, size: CGFloat = 264) -> NSImage? {
         guard let loadedAt else { return 0 }
         return max(0, lifetime - Int(now.timeIntervalSince(loadedAt)))
     }
+
+    /// Whether the code is still worth scanning: once it expires it goes.
+    func showsCode(now: Date) -> Bool { image != nil && secondsLeft(now: now) > 0 }
 }
 
 /// Pair a Phone…: the QR code, how to use it, and a countdown.
@@ -71,17 +74,26 @@ struct PhoneSheet: View {
     var body: some View {
         VStack(spacing: 14) {
             Text("Pair a Phone").font(.headline)
-            if let image = phone.image {
-                Image(nsImage: image)
-                    .interpolation(.none)
-                    .resizable()
-                    .frame(width: 264, height: 264)
-                    .accessibilityLabel("QR code for pairing a phone")
+            if phone.image != nil {
                 TimelineView(.periodic(from: .now, by: 1)) { ctx in
                     let left = phone.secondsLeft(now: ctx.date)
-                    Text(left > 0 ? String(format: "Works for %d:%02d more", left / 60, left % 60)
-                                  : "This code has expired.")
-                        .monospacedDigit().foregroundStyle(.secondary)
+                    VStack(spacing: 14) {
+                        if phone.showsCode(now: ctx.date), let image = phone.image {
+                            Image(nsImage: image)
+                                .interpolation(.none)
+                                .resizable()
+                                .frame(width: 264, height: 264)
+                                .accessibilityLabel("QR code for pairing a phone")
+                        } else {
+                            Image(systemName: "qrcode")
+                                .font(.system(size: 96)).foregroundStyle(.tertiary)
+                                .frame(width: 264, height: 264)
+                                .accessibilityLabel("The code has expired")
+                        }
+                        Text(left > 0 ? String(format: "Works for %d:%02d more", left / 60, left % 60)
+                                      : "This code has expired.")
+                            .monospacedDigit().foregroundStyle(.secondary)
+                    }
                 }
             } else if let error = phone.error {
                 Text(error).foregroundStyle(.red).textSelection(.enabled)

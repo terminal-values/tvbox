@@ -29,6 +29,18 @@ import Testing
         #expect(phone.secondsLeft(now: phone.loadedAt!) == 600)
     }
 
+    /// An expired code isn't left on screen to be scanned for nothing.
+    @Test func theCodeGoesWhenItExpires() async throws {
+        let fake = try FakeTV(answers: ["phone": Self.json])
+        let phone = PhoneModel(tv: fake.tv)
+        #expect(!phone.showsCode(now: Date()))
+        await phone.load()
+        let start = try #require(phone.loadedAt)
+        #expect(phone.showsCode(now: start))
+        #expect(phone.showsCode(now: start.addingTimeInterval(599)))
+        #expect(!phone.showsCode(now: start.addingTimeInterval(600)))
+    }
+
     @Test func errorShowsMessage() async throws {
         let msg = "TVhome won't pair a phone for this box: not a member"
         let fake = try FakeTV(exits: ["phone": 1], env: [:])
