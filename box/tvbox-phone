@@ -5,7 +5,7 @@
 # With --json (for the Mac app): {"url": ..., "expires": ...} instead.
 set -u
 . "${TVBOX_ENV:-/state/tvhome.env}"
-BASE=https://box.terminalvalues.org
+BASE=https://home.terminalvalues.org
 json=no
 while [ $# -gt 0 ]; do
     case $1 in

@@ -110,9 +110,9 @@ extension LinkAnswer {
             ("Open “\(name)”?", "\(shown)\n\nIt will open in \(app).")
         case .showFolder(let name, _):
             (name == "TVhome Folder" ? "This is the TVhome Folder." : "“\(name)” is a folder.",
-             "TVhome links don't open folders. Show it in the Finder instead.")
+             "Terminal Values shows folders in the Finder rather than opening them.")
         case .runsCode(let name, let shown, _):
-            ("“\(name)” runs code when opened.", "\(shown)\n\nTVhome links won't open it. You can still show it in the Finder.")
+            ("“\(name)” runs code when opened.", "\(shown)\n\nTerminal Values won't open it. You can still show it in the Finder.")
         case .noApp(let name, let shown, _):
             ("No app on this Mac opens “\(name)”.", "\(shown)\n\nYou can show it in the Finder instead.")
         case .notHereYet(let name, let shown):

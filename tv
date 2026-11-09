@@ -541,7 +541,7 @@ cmd_doctor() {
         dadd links warning "Not checked: there's no curl on this computer."
     else
         # Never through a proxy: the link has to reach this computer's box.
-        got=$(curl -s --noproxy '*' -o /dev/null -w '%{http_code} %{remote_ip}' --max-time 10 "$LINK_BASE" 2>/dev/null) && rc=0 || rc=$?
+        got=$(curl -s --noproxy '*' -o /dev/null -w '%{http_code} %{remote_ip}' --max-time 10 "$BOX_FOLDER" 2>/dev/null) && rc=0 || rc=$?
         code=${got%% *} ip=${got#* }
         if [ "$rc" = 6 ] || { [ -n "$ip" ] && [ "$ip" != 127.0.0.1 ]; }; then
             dadd links warning "box.terminalvalues.org doesn't lead to this computer here, so TVhome links won't open. Some routers and DNS services block this kind of name: allow box.terminalvalues.org in the router's settings, or use another DNS service (such as 1.1.1.1)."
@@ -581,7 +581,10 @@ cmd_doctor() {
 
 # --- tv link ---------------------------------------------------------------
 
-LINK_BASE=http://box.terminalvalues.org:$LINK_PORT/folder/
+# A TVhome link: TV's phone page, with the path after the #. On a computer
+# the page sends it on to the box, as folder.localhost.
+LINK_BASE=https://home.terminalvalues.org/#
+BOX_FOLDER=http://box.terminalvalues.org:$LINK_PORT/folder/
 
 # Percent-encode a path for a URL: A-Za-z0-9-._~ and / stay, every other byte
 # of the UTF-8 becomes %XX in capitals. Works on bytes (od), so it needs no
@@ -620,26 +623,43 @@ link_refusal() {
 }
 
 # Read a TVhome link back into a path in the folder: the opposite of tv link.
-# Accepts http://box.terminalvalues.org:PORT/folder/PATH and tvhome://folder/PATH
-# (scheme and host in any case; a query or fragment is ignored). On success it
+# Accepts https://home.terminalvalues.org/#PATH (the path is the fragment; a
+# pairing link, #join=, is not a link), and, with any query or fragment
+# ignored, tvhome://folder/PATH, http://folder.localhost:8484/folder/PATH and
+# old links, http://box.terminalvalues.org:8484/folder/PATH. Scheme and host
+# in any case. On success it
 # returns 0 and sets rel (the decoded path, no leading or trailing /, empty for
 # the folder itself) and isdir (1 if the link ends in / or is the folder). On
 # refusal it returns 1 and sets why to one of not-a-link, traversal, nul, utf8,
 # git, hidden: the first that applies, in that order.
 decode_link() {
     rel= isdir= why=
-    link=${1%%#*}; link=${link%%\?*}
-    lower=$(printf '%s' "$link" | LC_ALL=C tr 'A-Z' 'a-z')
-    case $lower in
-        tvhome://folder/*) skip=16 ;;
-        http://box.terminalvalues.org:8484/*) skip=34 ;;
-        *) why=not-a-link; return 1 ;;
-    esac
-    p=$link
-    while [ "$skip" -gt 0 ]; do p=${p#?}; skip=$((skip - 1)); done
-    case $lower in
-        http:*) case $p in /folder/*) p=${p#/folder/} ;; *) why=not-a-link; return 1 ;; esac ;;
-        *) ;;
+    case $(printf '%s' "$1" | LC_ALL=C tr 'A-Z' 'a-z') in
+        https://home.terminalvalues.org/*)
+            p=$1 skip=32
+            while [ "$skip" -gt 0 ]; do p=${p#?}; skip=$((skip - 1)); done
+            case $p in
+                '') ;;
+                \#*) p=${p#?}; p=${p%%#*}; p=${p%%\?*} ;;
+                *) why=not-a-link; return 1 ;;
+            esac
+            case $p in join=*) why=not-a-link; return 1 ;; esac
+            [ -n "$p" ] || p=/ ;;
+        *)
+            link=${1%%#*}; link=${link%%\?*}
+            lower=$(printf '%s' "$link" | LC_ALL=C tr 'A-Z' 'a-z')
+            case $lower in
+                tvhome://folder/*) skip=16 ;;
+                http://box.terminalvalues.org:8484/*) skip=34 ;;
+                http://folder.localhost:8484/*) skip=28 ;;
+                *) why=not-a-link; return 1 ;;
+            esac
+            p=$link
+            while [ "$skip" -gt 0 ]; do p=${p#?}; skip=$((skip - 1)); done
+            case $lower in
+                http:*) case $p in /folder/*) p=${p#/folder/} ;; *) why=not-a-link; return 1 ;; esac ;;
+                *) ;;
+            esac ;;
     esac
     case $p in ''|*/) isdir=1 ;; esac
     p=${p%/}
@@ -767,7 +787,7 @@ cmd_link() {
             hidden) die 2 "$arg is hidden (its name starts with a dot), and TVhome doesn't serve hidden files." ;;
         esac
         link=$LINK_BASE$(urlencode_path "$rel")
-        case $link in */) ;; *) [ -z "$isdir" ] || link=$link/ ;; esac
+        case $link in */|*\#) ;; *) [ -z "$isdir" ] || link=$link/ ;; esac
         links=${links:+$links
 }$link
     done

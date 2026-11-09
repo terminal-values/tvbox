@@ -55,7 +55,7 @@ def phone(tmp_path):
 def test_qr_shown(phone):
     r = phone()
     assert r.returncode == 0
-    assert (r.log / "qr").read_text().strip() == "https://box.terminalvalues.org/#join=tskey-auth-FAKE"
+    assert (r.log / "qr").read_text().strip() == "https://home.terminalvalues.org/#join=tskey-auth-FAKE"
     assert r.stdout == "[QR CODE]\n" + INSTRUCTIONS
     assert "tskey-" not in r.stdout + r.stderr
     curl = (r.log / "curl").read_text()
@@ -66,7 +66,7 @@ def test_qr_shown(phone):
 def test_json(phone):
     r = phone(args=["--json"])
     assert r.returncode == 0
-    assert json.loads(r.stdout) == {"url": "https://box.terminalvalues.org/#join=tskey-auth-FAKE",
+    assert json.loads(r.stdout) == {"url": "https://home.terminalvalues.org/#join=tskey-auth-FAKE",
                                     "expires": 600}
     assert not (r.log / "qr").exists()
 
