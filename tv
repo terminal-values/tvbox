@@ -634,7 +634,10 @@ link_refusal() {
 # git, hidden: the first that applies, in that order.
 decode_link() {
     rel= isdir= why=
-    case $(printf '%s' "$1" | LC_ALL=C tr 'A-Z' 'a-z') in
+    whole=$(printf '%s' "$1" | LC_ALL=C tr 'A-Z' 'a-z')
+    # The bare name, typed without its slash, is the folder.
+    if [ "$whole" = https://home.terminalvalues.org ]; then set -- "$1/"; whole=$whole/; fi
+    case $whole in
         https://home.terminalvalues.org/*)
             p=$1 skip=32
             while [ "$skip" -gt 0 ]; do p=${p#?}; skip=$((skip - 1)); done

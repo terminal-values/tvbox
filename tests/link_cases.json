@@ -29,7 +29,9 @@
   {"link": "https://home.terminalvalues.org/", "path": "", "dir": true},
   {"link": "https://home.terminalvalues.org/#", "path": "", "dir": true},
   {"link": "http://folder.localhost:8484/folder/doc/a.txt", "path": "doc/a.txt", "dir": false},
-  {"link": "http://Folder.LocalHost:8484/folder/doc/a.txt#top", "path": "doc/a.txt", "dir": false}
+  {"link": "http://Folder.LocalHost:8484/folder/doc/a.txt#top", "path": "doc/a.txt", "dir": false},
+  {"link": "https://home.terminalvalues.org", "path": "", "dir": true},
+  {"link": "HTTPS://Home.TerminalValues.ORG", "path": "", "dir": true}
 ],
 "refused_links": [
   {"link": "https://box.terminalvalues.org:8484/folder/doc/a.txt", "refused": "not-a-link"},
@@ -63,7 +65,9 @@
   {"link": "https://home.terminalvalues.org.evil.example/#doc/a.txt", "refused": "not-a-link"},
   {"link": "http://folder.localhost:8485/folder/doc/a.txt", "refused": "not-a-link"},
   {"link": "http://folder.localhost:8484/doc/a.txt", "refused": "not-a-link"},
-  {"link": "https://home.terminalvalues.org/#doc/../../x", "refused": "traversal"}
+  {"link": "https://home.terminalvalues.org/#doc/../../x", "refused": "traversal"},
+  {"link": "https://home.terminalvalues.organ/#doc/a.txt", "refused": "not-a-link"},
+  {"link": "https://home.terminalvalues.org.", "refused": "not-a-link"}
 ],
 "runs_code_extensions": ["app", "command", "sh", "bash", "zsh", "py", "pl", "rb", "scpt", "workflow", "terminal", "desktop", "jar", "exe", "bat", "pkg", "mpkg", "prefpane", "saver", "fileloc", "inetloc", "webloc", "shortcut", "tool", "term", "jnlp", "wflow", "scptd", "action", "deb", "rpm", "flatpakref", "appimage"]
 }
