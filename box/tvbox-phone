@@ -19,7 +19,7 @@ done
 fail() { echo "$*" >&2; exit 1; }
 
 # The body, a newline, then the HTTP status.
-reply=$(curl -sS --max-time 20 --socks5-hostname 127.0.0.1:1055 -X POST \
+reply=$(curl -sS --max-time 35 --socks5-hostname 127.0.0.1:1055 -X POST \
     -w '\n%{http_code}' "http://$TVHOME_HOST:8081/phone-key" 2>/dev/null) ||
     fail "Couldn't reach TVhome's pairing service. Is the box on TV's tailnet? (tv status)"
 code=${reply##*

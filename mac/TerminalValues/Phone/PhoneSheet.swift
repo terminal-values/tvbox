@@ -40,7 +40,7 @@ func qrImage(for text: String, size: CGFloat = 264) -> NSImage? {
         error = nil
         defer { loading = false }
         do {
-            let link = try await tv.json(PhoneLink.self, ["phone", "--json"])
+            let link = try await tv.json(PhoneLink.self, ["phone", "--json"], timeout: .seconds(45))
             guard let img = qrImage(for: link.url) else {
                 error = "The app couldn't draw the code."
                 return

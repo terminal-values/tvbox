@@ -97,3 +97,9 @@ def test_unreachable(phone):
     assert r.returncode == 1
     assert r.stderr.strip() == ("Couldn't reach TVhome's pairing service. "
                                 "Is the box on TV's tailnet? (tv status)")
+
+
+def test_client_outwaits_the_server(phone):
+    # The service may take a token and a key at 15 s each; the client waits longer.
+    phone()
+    assert "--max-time 35" in (phone().log / "curl").read_text()
