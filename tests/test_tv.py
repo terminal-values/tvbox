@@ -937,14 +937,19 @@ def test_doctor_all_ok(box):
 
 
 @pytest.mark.parametrize("fake,status,words", [
-    ("ok", "ok", "open"), ("unresolved", "warning", "router"),
-    ("elsewhere", "warning", "router"), ("down", "warning", "don't answer")])
+    ("ok", "ok", "TVhome links open on this computer."),
+    ("down", "warning", "TVhome links don't answer through the box (got 000)."),
+    ("refused", "warning", "TVhome links don't answer through the box (got 403).")])
 def test_doctor_checks_links(box, fake, status, words):
+    # Through folder.localhost, which browsers keep on this computer whatever
+    # DNS says, so there's no DNS or router to blame any more.
     updatable(box, revision=NEW)
     box.configure(IMAGE="ghcr.io/terminal-values/tvbox@sha256:abc", REVISION=NEW)
     res = doctor_json(box, FAKE_STATE="running", FAKE_EXEC_OUT=BOX_DOCTOR, FAKE_LINKS=fake)
-    assert res["links"]["status"] == status and words in res["links"]["message"]
-    assert "127.0.0.1" not in res["links"]["message"]  # the name's DNS value isn't spelled out
+    assert (res["links"]["status"], res["links"]["message"]) == (status, words)
+    curl = [c for c in box.calls() if c[0] == "curl" and "http://folder.localhost:8484/folder/" in c]
+    assert curl and "--resolve" in curl[0] and "folder.localhost:8484:127.0.0.1" in curl[0]
+    assert "--noproxy" in curl[0]
 
 
 def test_doctor_links_check_ignores_a_proxy(box):

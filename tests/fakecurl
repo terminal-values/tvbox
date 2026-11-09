@@ -26,11 +26,16 @@ def emit(text):
         sys.stdout.write(text)
 
 
-if url.startswith("http://box.terminalvalues.org:"):
+if url.startswith("http://folder.localhost:"):
     # tv doctor's links check; -w is ignored, the answer is "CODE IP".
+    if os.environ.get("FAKE_LOG"):
+        with open(os.environ["FAKE_LOG"], "a") as log:
+            log.write(json.dumps(["curl"] + args) + "\n")
     links = os.environ.get("FAKE_LINKS", "ok")
     if os.environ.get("http_proxy") and "--noproxy" not in args:
         links = "proxy"  # curl would ask the proxy, which can't reach this computer
+    if "--resolve" not in args:
+        links = "unresolved"  # a curl that doesn't know *.localhost
     if links == "proxy":
         sys.stdout.write("502 192.0.2.80")
         sys.exit(0)
@@ -40,7 +45,7 @@ if url.startswith("http://box.terminalvalues.org:"):
     if links == "down":
         sys.stdout.write("000 127.0.0.1")
         sys.exit(7)
-    sys.stdout.write("200 203.0.113.9" if links == "elsewhere" else "200 127.0.0.1")
+    sys.stdout.write("403 127.0.0.1" if links == "refused" else "200 127.0.0.1")
 elif url.endswith("/repos/terminal-values/tvbox/commits/main"):
     emit(json.dumps({"sha": new, "commit": {"message": "newest"}}, indent=2))
 elif "/repos/terminal-values/tvbox/commits?" in url:
