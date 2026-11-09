@@ -112,7 +112,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             for button in buttons { alert.addButton(withTitle: button.title) }
             let n = alert.runModal().rawValue - NSApplication.ModalResponse.alertFirstButtonReturn.rawValue
             guard buttons.indices.contains(n) else { return }
-            switch afterChoice(buttons[n], on: shown, recheck: { answer(for: link, folder: Self.tvFolder()) }) {
+            switch afterChoice(buttons[n], on: shown, link: link,
+                               recheck: { answer(for: link, folder: Self.tvFolder()) }) {
+            case .copy(let shared):
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(shared, forType: .string)
+                return
             case .open(let resolved):
                 NSWorkspace.shared.open(URL(fileURLWithPath: resolved))
                 return

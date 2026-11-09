@@ -15,18 +15,20 @@ enum LinkAnswer: Equatable {
 
     var buttons: [LinkButton] {
         switch self {
-        case .open: [.open, .showInFinder, .cancel]
-        case .showFolder, .runsCode, .noApp: [.showInFinder, .cancel]
-        case .notHereYet, .refused, .notJoined: [.ok]
+        case .open: [.open, .showInFinder, .copyLink, .cancel]
+        case .showFolder, .runsCode, .noApp: [.showInFinder, .copyLink, .cancel]
+        // Not here yet, but the link still works for everyone else.
+        case .notHereYet: [.copyLink, .ok]
+        case .refused, .notJoined: [.ok]
         }
     }
 }
 
-enum LinkButton: Equatable { case open, showInFinder, cancel, ok }
+enum LinkButton: Equatable { case open, showInFinder, copyLink, cancel, ok }
 
 enum LinkAction: Equatable {
     case open(resolved: String), reveal(logical: String), openFolder(logical: String)
-    case show(LinkAnswer), nothing
+    case copy(link: String), show(LinkAnswer), nothing
 }
 
 /// folder: from tv's config, nil if this Mac hasn't joined.
@@ -52,10 +54,17 @@ func answer(for link: String, folder: String?,
 }
 
 /// What a button press does. Open re-checks: it opens only if recheck()
-/// gives the same .open answer; otherwise it shows the new one.
-func afterChoice(_ button: LinkButton, on answer: LinkAnswer, recheck: () -> LinkAnswer) -> LinkAction {
+/// gives the same .open answer; otherwise it shows the new one. Copy gives
+/// link's TVhome link, the one to share, as tv link makes it.
+func afterChoice(_ button: LinkButton, on answer: LinkAnswer, link: String = "",
+                 recheck: () -> LinkAnswer) -> LinkAction {
     switch button {
     case .cancel, .ok: return .nothing
+    case .copyLink:
+        guard case .success(let d) = TVLink.decode(link),
+              case .success(let shared) = TVLink.link(relative: d.path, isDirectory: d.isDirectory)
+        else { return .nothing }
+        return .copy(link: shared)
     case .showInFinder:
         switch answer {
         case .showFolder(_, let logical): return .openFolder(logical: logical)
@@ -130,6 +139,7 @@ extension LinkButton {
         switch self {
         case .open: "Open"
         case .showInFinder: "Show in Finder"
+        case .copyLink: "Copy TVhome Link"
         case .cancel: "Cancel"
         case .ok: "OK"
         }
