@@ -1135,7 +1135,11 @@ case $cmd in
     catch-up) need_box; in_box tvbox-catch-up "$@" ;;
     changes) need_box; in_box tvbox-catch-up --changes "$@" ;;
     push) need_box; in_box tvbox-push ;;
-    phone) need_box; in_box tvbox-phone "$@" ;;
+    phone) need_box
+        # The app can update before the box does.
+        in_box sh -c 'command -v tvbox-phone' >/dev/null 2>&1 ||
+            die 1 "This box is from before phone pairing: run tv update, then try again."
+        in_box tvbox-phone "$@" ;;
     git|passage) need_box; in_box "$cmd" "$@" ;;
     run) need_box; in_box "$@" ;;
     shell) need_box; in_box bash -l ;;

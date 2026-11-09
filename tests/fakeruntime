@@ -7,6 +7,7 @@ first) to $FAKE_LOG. Behaviour:
   FAKE_STATE=...       the box is running, stopped or absent (default absent)
   FAKE_RUN_FAILS=1     making the box fails (as when its port is taken)
   FAKE_EXEC_OUT=...    what exec prints
+  FAKE_EXEC_FAILS=1    exec exits 1 (the command isn't in the box)
   FAKE_PULL_FAILS=1    pulling an image fails (offline)
   stats                answers in each runtime's own --format json shape
 """
@@ -49,6 +50,8 @@ if verb == "stats":
         print(json.dumps([{"name": "tvbox", "cpu_percent": "3.00%",
                            "mem_usage": "408.9MB / 1.074GB"}]))
     sys.exit(0)
+if verb == "exec" and os.environ.get("FAKE_EXEC_FAILS") == "1":
+    sys.exit(1)
 if verb == "exec" and "FAKE_EXEC_OUT" in os.environ:
     print(os.environ["FAKE_EXEC_OUT"])
     sys.exit(0)

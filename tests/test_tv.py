@@ -179,7 +179,7 @@ def test_commands_exec_in_box(box, args, inside):
     box.runtimes("docker")
     box.configure()
     box.tv(*args, FAKE_STATE="running")
-    ex = box.call("exec")
+    ex = [c for c in box.calls() if len(c) > 1 and c[1] == "exec"][-1]
     assert ex[-len(inside):] == inside
     assert ex[ex.index("-w") + 1] == "/home/tv/terminalvalues"
     assert ex[ex.index("-u") + 1] == f"{os.getuid()}:{os.getgid()}"
@@ -1625,6 +1625,16 @@ def test_open_checks_again_after_the_answer(box, swap, status, words):
         os.close(master)
         p.kill()
     assert p.returncode == status and words in rest and not opened.exists()
+
+
+def test_phone_on_a_box_from_before_it(box):
+    # The app updates itself before the box does: say so, not the runtime's error.
+    box.runtimes("docker")
+    box.configure()
+    r = box.tv("phone", "--json", FAKE_STATE="running", FAKE_EXEC_FAILS="1")
+    assert r.returncode == 1
+    assert "tv update" in r.stderr
+    assert not [c for c in box.calls() if c[-1:] == ["tvbox-phone"] or c[-2:] == ["tvbox-phone", "--json"]]
 
 
 def test_phone_needs_a_running_box(box):
