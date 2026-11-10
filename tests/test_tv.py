@@ -922,8 +922,9 @@ def test_update_with_the_apps_tv_hands_over_to_the_app(box, tmp_path):
     link, app_tv, env = apps_tv(box, tmp_path)
     r = subprocess.run([SH, str(link), "update", "--yes"], env=env, capture_output=True, text=True)
     assert r.returncode == 0, r.stdout + r.stderr
-    assert "Terminal Values" in r.stdout and "Check for Updates" in r.stdout
-    assert (box.tmp / "opened").read_text().strip() == "-a Terminal Values"
+    # The app checks for updates at once, as if from Check for Updates….
+    assert "Terminal Values" in r.stdout and "checking" in r.stdout
+    assert (box.tmp / "opened").read_text().strip() == "tvhome://update"
     assert not [c for c in box.calls() if len(c) > 1 and c[1] in ("rm", "run", "stop", "pull")]
     assert link.is_symlink() and app_tv.read_text() == TV.read_text()
 

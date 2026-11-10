@@ -1058,10 +1058,11 @@ cmd_update() {
     # With the Mac app, updates come with the app's own, which keeps the tv
     # inside it and the box from the same commit; one here would move the box
     # ahead of the app, and the app would move it back when it next starts.
+    # tvhome://update has the app check now, as Check for Updates… does.
     if [ "$check" = no ] && apps_tv; then
         say "On this Mac, Terminal Values.app updates the box along with itself, so"
-        say "the two always match. Use Check for Updates… at the foot of its window."
-        open -a "Terminal Values" 2>/dev/null || true
+        say "the two always match. It's checking for updates now."
+        open tvhome://update 2>/dev/null || open -a "Terminal Values" 2>/dev/null || true
         return
     fi
     command -v curl >/dev/null 2>&1 || die 1 "tv update needs curl."
