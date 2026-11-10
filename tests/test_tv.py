@@ -1656,3 +1656,56 @@ def test_phone_needs_a_running_box(box):
     r = box.tv("phone", FAKE_STATE="stopped")
     assert r.returncode == 3
     assert "tv start" in r.stdout + r.stderr
+
+
+# --- Claude Code's Remote Control, in the TVhome Folder (2026-11-09) ----------
+
+def fake_claude(box, where):
+    where.mkdir(parents=True, exist_ok=True)
+    (where / "claude").write_text(
+        f'#!/bin/sh\npwd > {box.tmp}/claude-cwd\nprintf "%s\\n" "$@" > {box.tmp}/claude-args\n')
+    (where / "claude").chmod(0o755)
+
+
+def test_claude_rc_serves_the_folder(box):
+    # Sessions share the folder itself: a worktree has the code but none of
+    # TV's documents, which git doesn't carry.
+    box.configure()
+    (box.home / "terminalvalues").mkdir()
+    fake_claude(box, box.bin)
+    fake_tool(box, "open", f'echo "$@" > {box.tmp}/opened')
+    r = box.tv("claude-rc", "--permission-mode", "plan", FAKE_UNAME="Darwin")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert (box.tmp / "claude-cwd").read_text().strip() == str(box.home / "terminalvalues")
+    assert (box.tmp / "claude-args").read_text().splitlines() == [
+        "remote-control", "--spawn", "same-dir", "--name", "TVhome Folder",
+        "--permission-mode", "plan"]
+    assert (box.tmp / "opened").read_text().strip() == "https://claude.ai/code"
+    assert "claude.ai/code" in r.stdout
+
+
+def test_claude_rc_finds_claude_where_its_installer_puts_it(box):
+    box.configure()
+    (box.home / "terminalvalues").mkdir()
+    fake_claude(box, box.home / ".local" / "bin")
+    r = box.tv("claude-rc")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert (box.tmp / "claude-args").read_text().startswith("remote-control\n")
+    # No opener here, so it says where to go instead.
+    assert "https://claude.ai/code" in r.stdout
+
+
+def test_claude_rc_without_claude_says_how_to_get_it(box):
+    box.configure()
+    (box.home / "terminalvalues").mkdir()
+    r = box.tv("claude-rc")
+    assert r.returncode == 2
+    assert "Claude Code isn't installed" in r.stderr and "https://" in r.stderr
+
+
+def test_claude_rc_needs_to_have_joined(box):
+    fake_claude(box, box.bin)
+    r = box.tv("claude-rc")
+    assert r.returncode == 2
+    assert "tv join" in r.stderr
+    assert not (box.tmp / "claude-args").exists()
