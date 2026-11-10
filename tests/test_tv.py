@@ -31,8 +31,10 @@ def box(tmp_path):
 
 def box_env(box):
     # TV_PORT_PAUSE=0: no half-second waits for a busy port.
+    # TV_EXTRA_PATH empty: the runtimes installed on this machine stay out.
     return {"PATH": str(box.bin), "HOME": str(box.home), "TV_CONFIG": str(box.config),
-            "FAKE_LOG": str(box.log), "SHELL": "/bin/zsh", "TV_PORT_PAUSE": "0"}
+            "FAKE_LOG": str(box.log), "SHELL": "/bin/zsh", "TV_PORT_PAUSE": "0",
+            "TV_EXTRA_PATH": ""}
 
 
 class Box:
@@ -94,6 +96,31 @@ def test_prefers_apples_container(box):
     box.configure()
     box.tv("start")
     assert {c[0] for c in box.calls()} == {"container"}
+
+
+def test_finds_a_runtime_off_the_path(box, tmp_path):
+    # Apps (the Claude app, say) can run tv with a bare PATH, missing where
+    # Apple's container, Docker and Homebrew install their commands.
+    extra = tmp_path / "usr-local-bin"
+    extra.mkdir()
+    (extra / "container").symlink_to(FAKE)
+    box.configure()
+    r = box.tv("start", TV_EXTRA_PATH=f"/nonexistent:{extra}")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert box.calls()[0][0] == "container"
+
+
+def test_a_runtime_on_the_path_wins_over_one_off_it(box, tmp_path):
+    # Otherwise a test's fake runtime loses to this machine's real one.
+    extra = tmp_path / "opt-homebrew-bin"
+    extra.mkdir()
+    (extra / "container").write_text(f"#!/bin/sh\ntouch {tmp_path}/real-runtime-used\nexit 1\n")
+    (extra / "container").chmod(0o755)
+    box.runtimes("docker")
+    box.configure()
+    box.tv("start", TV_EXTRA_PATH=str(extra))
+    assert box.calls()[0][0] == "docker"
+    assert not (tmp_path / "real-runtime-used").exists()
 
 
 def test_no_runtime_at_all(box):
@@ -625,7 +652,7 @@ def test_move_takes_a_relative_path(box, tmp_path):
     old = box.home / "terminalvalues"
     old.mkdir()
     box.configure(FOLDER=str(old))
-    e = {"PATH": str(box.bin), "HOME": str(box.home), "TV_CONFIG": str(box.config),
+    e = {"PATH": str(box.bin), "HOME": str(box.home), "TV_CONFIG": str(box.config), "TV_EXTRA_PATH": "",
          "FAKE_LOG": str(box.log), "FAKE_STATE": "stopped"}
     r = subprocess.run([SH, str(TV), "move", "Documents/tv"], cwd=box.home, env=e,
                        capture_output=True, text=True)
@@ -882,7 +909,7 @@ def apps_tv(box, tmp_path):
     link.symlink_to(app_tv)
     (box.bin / "open").write_text(f'#!/bin/sh\necho "$@" > {box.tmp}/opened\n')
     (box.bin / "open").chmod(0o755)
-    env = {"PATH": str(box.bin), "HOME": str(box.home), "TV_CONFIG": str(box.config),
+    env = {"PATH": str(box.bin), "HOME": str(box.home), "TV_CONFIG": str(box.config), "TV_EXTRA_PATH": "",
            "FAKE_LOG": str(box.log), "FAKE_STATE": "running"}
     return link, app_tv, env
 

@@ -42,6 +42,18 @@ detect_runtime() {
             if command -v "$r" >/dev/null 2>&1; then RT=$r; break; fi
         done
     fi
+    # Apps (the Claude app, say) can run tv with a bare PATH, without the
+    # places Apple's container, Docker, Podman and Homebrew put their
+    # commands. Only when nothing's found on the PATH itself are those
+    # added, at the end, so a runtime on the PATH always wins.
+    if [ -z "$RT" ] && [ -z "${TV_PATH_EXTENDED:-}" ]; then
+        TV_PATH_EXTENDED=1
+        for d in $(printf '%s' "${TV_EXTRA_PATH-/usr/local/bin:/opt/homebrew/bin:/opt/podman/bin}" | tr : ' '); do
+            case :$PATH: in *:"$d":*) ;; *) [ -d "$d" ] && PATH=$PATH:$d ;; esac
+        done
+        export PATH
+        detect_runtime
+    fi
 }
 
 find_runtime() {

@@ -24,7 +24,8 @@ def home(tmp_path):
 
 def env(home, shell="/bin/zsh", path="/usr/bin:/bin", **kw):
     e = {"HOME": str(home), "SHELL": shell, "PATH": path, "TVBOX_SOURCE": str(ROOT),
-         "TV_CONFIG": str(home / ".config/tv/config"), "TVBOX_NO_JOIN": "1"}
+         "TV_CONFIG": str(home / ".config/tv/config"), "TVBOX_NO_JOIN": "1",
+         "TV_EXTRA_PATH": ""}
     e.update(kw)
     return e
 
