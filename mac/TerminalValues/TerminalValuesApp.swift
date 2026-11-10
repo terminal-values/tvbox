@@ -8,7 +8,8 @@ struct TerminalValuesApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            MenuContent(model: delegate.model)
+            MenuContent(model: delegate.model, canUpdate: delegate.updatesOn,
+                        checkForUpdates: delegate.checkForUpdates)
                 .task { await delegate.model.menuOpened() }
         } label: {
             MenuLabel(model: delegate.model)

@@ -5,6 +5,9 @@ import SwiftUI
 /// this Mac's box, then Quit.
 struct MenuContent: View {
     @Bindable var model: AppModel
+    /// Only a release build checks for updates (the window's footer is the same).
+    var canUpdate = false
+    var checkForUpdates: () -> Void = {}
     @Environment(\.openWindow) private var openWindow
     @State private var startAtLogin = SMAppService.mainApp.status == .enabled
 
@@ -41,6 +44,9 @@ struct MenuContent: View {
                 catch { startAtLogin = SMAppService.mainApp.status == .enabled }
             }
         Button(model.isSetUp ? "Open TV Box Status…" : "Set Up Terminal Values…") { showWindow() }
+        if canUpdate {
+            Button("Check for Updates…", action: checkForUpdates)
+        }
         Divider()
         Button("Quit Terminal Values") { NSApplication.shared.terminate(nil) }
             .keyboardShortcut("q")
