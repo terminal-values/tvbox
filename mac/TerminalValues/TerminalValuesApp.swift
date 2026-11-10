@@ -8,7 +8,8 @@ struct TerminalValuesApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            MenuContent(model: delegate.model)
+            MenuContent(model: delegate.model, canUpdate: delegate.updatesOn,
+                        checkForUpdates: delegate.checkForUpdates)
                 .task { await delegate.model.menuOpened() }
         } label: {
             MenuLabel(model: delegate.model)
@@ -39,7 +40,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var updatesOn: Bool {
         !((Bundle.main.object(forInfoDictionaryKey: "SUPublicEDKey") as? String) ?? "").isEmpty
     }
-    func checkForUpdates() { if updatesOn { updater.checkForUpdates(nil) } }
+    /// Brought forward first: a menu bar app's Sparkle window can otherwise
+    /// open behind whatever the member was using.
+    func checkForUpdates() {
+        guard updatesOn else { return }
+        NSApp.activate()
+        updater.checkForUpdates(nil)
+    }
     private var quitting = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -85,9 +92,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var linkQueue: [URL] = []
     private var handlingLinks = false
 
-    /// tvhome:// links, from a link page's "Open on this computer".
+    /// tvhome:// links, from a link page's "Open on this computer", and
+    /// tvhome://update, from tv update.
     func application(_ application: NSApplication, open urls: [URL]) {
-        linkQueue += urls.filter { $0.scheme?.lowercased() == "tvhome" }
+        let requests = urls.compactMap(AppRequest.init)
+        if requests.contains(.update) {
+            // Later, so that a launch to open it has started Sparkle first.
+            DispatchQueue.main.async { [self] in checkForUpdates() }
+        }
+        linkQueue += requests.compactMap { if case .link(let l) = $0 { URL(string: l) } else { nil } }
         guard !handlingLinks else { return }
         handlingLinks = true
         // Later, so that launching finishes (the box starts) before a
