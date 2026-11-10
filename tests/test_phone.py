@@ -42,7 +42,7 @@ def phone(tmp_path):
     log.mkdir()
 
     def run(code="200", body=OK, args=(), exit_=None):
-        env = {**os.environ, "PATH": f"{bin_}:{os.environ['PATH']}", "FAKE_LOG": str(log),
+        env = {**os.environ, "TV_EXTRA_PATH": "", "PATH": f"{bin_}:{os.environ['PATH']}", "FAKE_LOG": str(log),
                "FAKE_BODY": body, "FAKE_CODE": code, "FAKE_EXIT": exit_ or "",
                "TVBOX_ENV": str(tmp_path / "tvhome.env")}
         r = subprocess.run(["sh", str(ROOT / "box" / "tvbox-phone"), *args], env=env,

@@ -45,7 +45,7 @@ def status(tmp_path):
             (api / "db_status").write_text(json.dumps(local))
         if remote is not None:
             (api / "db_completion").write_text(json.dumps(remote))
-        env = {**os.environ, "PATH": f"{bin_}:{os.environ['PATH']}", "FAKE_API": str(api),
+        env = {**os.environ, "TV_EXTRA_PATH": "", "PATH": f"{bin_}:{os.environ['PATH']}", "FAKE_API": str(api),
                "FAKE_TS": ts or "", "FAKE_ONLINE": online,
                "TVBOX_ENV": str(env_file), "TVBOX_ST": str(st)}
         return subprocess.run(["sh", str(ROOT / "box" / "tvbox-status"), *args], env=env,

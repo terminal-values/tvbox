@@ -31,8 +31,10 @@ def box(tmp_path):
 
 def box_env(box):
     # TV_PORT_PAUSE=0: no half-second waits for a busy port.
+    # TV_EXTRA_PATH empty: the runtimes installed on this machine stay out.
     return {"PATH": str(box.bin), "HOME": str(box.home), "TV_CONFIG": str(box.config),
-            "FAKE_LOG": str(box.log), "SHELL": "/bin/zsh", "TV_PORT_PAUSE": "0"}
+            "FAKE_LOG": str(box.log), "SHELL": "/bin/zsh", "TV_PORT_PAUSE": "0",
+            "TV_EXTRA_PATH": ""}
 
 
 class Box:
@@ -94,6 +96,31 @@ def test_prefers_apples_container(box):
     box.configure()
     box.tv("start")
     assert {c[0] for c in box.calls()} == {"container"}
+
+
+def test_finds_a_runtime_off_the_path(box, tmp_path):
+    # Apps (the Claude app, say) can run tv with a bare PATH, missing where
+    # Apple's container, Docker and Homebrew install their commands.
+    extra = tmp_path / "usr-local-bin"
+    extra.mkdir()
+    (extra / "container").symlink_to(FAKE)
+    box.configure()
+    r = box.tv("start", TV_EXTRA_PATH=f"/nonexistent:{extra}")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert box.calls()[0][0] == "container"
+
+
+def test_a_runtime_on_the_path_wins_over_one_off_it(box, tmp_path):
+    # Otherwise a test's fake runtime loses to this machine's real one.
+    extra = tmp_path / "opt-homebrew-bin"
+    extra.mkdir()
+    (extra / "container").write_text(f"#!/bin/sh\ntouch {tmp_path}/real-runtime-used\nexit 1\n")
+    (extra / "container").chmod(0o755)
+    box.runtimes("docker")
+    box.configure()
+    box.tv("start", TV_EXTRA_PATH=str(extra))
+    assert box.calls()[0][0] == "docker"
+    assert not (tmp_path / "real-runtime-used").exists()
 
 
 def test_no_runtime_at_all(box):
@@ -625,7 +652,7 @@ def test_move_takes_a_relative_path(box, tmp_path):
     old = box.home / "terminalvalues"
     old.mkdir()
     box.configure(FOLDER=str(old))
-    e = {"PATH": str(box.bin), "HOME": str(box.home), "TV_CONFIG": str(box.config),
+    e = {"PATH": str(box.bin), "HOME": str(box.home), "TV_CONFIG": str(box.config), "TV_EXTRA_PATH": "",
          "FAKE_LOG": str(box.log), "FAKE_STATE": "stopped"}
     r = subprocess.run([SH, str(TV), "move", "Documents/tv"], cwd=box.home, env=e,
                        capture_output=True, text=True)
@@ -882,7 +909,7 @@ def apps_tv(box, tmp_path):
     link.symlink_to(app_tv)
     (box.bin / "open").write_text(f'#!/bin/sh\necho "$@" > {box.tmp}/opened\n')
     (box.bin / "open").chmod(0o755)
-    env = {"PATH": str(box.bin), "HOME": str(box.home), "TV_CONFIG": str(box.config),
+    env = {"PATH": str(box.bin), "HOME": str(box.home), "TV_CONFIG": str(box.config), "TV_EXTRA_PATH": "",
            "FAKE_LOG": str(box.log), "FAKE_STATE": "running"}
     return link, app_tv, env
 
@@ -1656,3 +1683,56 @@ def test_phone_needs_a_running_box(box):
     r = box.tv("phone", FAKE_STATE="stopped")
     assert r.returncode == 3
     assert "tv start" in r.stdout + r.stderr
+
+
+# --- Claude Code's Remote Control, in the TVhome Folder (2026-11-09) ----------
+
+def fake_claude(box, where):
+    where.mkdir(parents=True, exist_ok=True)
+    (where / "claude").write_text(
+        f'#!/bin/sh\npwd > {box.tmp}/claude-cwd\nprintf "%s\\n" "$@" > {box.tmp}/claude-args\n')
+    (where / "claude").chmod(0o755)
+
+
+def test_claude_rc_serves_the_folder(box):
+    # Sessions share the folder itself: a worktree has the code but none of
+    # TV's documents, which git doesn't carry.
+    box.configure()
+    (box.home / "terminalvalues").mkdir()
+    fake_claude(box, box.bin)
+    fake_tool(box, "open", f'echo "$@" > {box.tmp}/opened')
+    r = box.tv("claude-rc", "--permission-mode", "plan", FAKE_UNAME="Darwin")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert (box.tmp / "claude-cwd").read_text().strip() == str(box.home / "terminalvalues")
+    assert (box.tmp / "claude-args").read_text().splitlines() == [
+        "remote-control", "--spawn", "same-dir", "--name", "TVhome Folder",
+        "--permission-mode", "plan"]
+    assert (box.tmp / "opened").read_text().strip() == "https://claude.ai/code"
+    assert "claude.ai/code" in r.stdout
+
+
+def test_claude_rc_finds_claude_where_its_installer_puts_it(box):
+    box.configure()
+    (box.home / "terminalvalues").mkdir()
+    fake_claude(box, box.home / ".local" / "bin")
+    r = box.tv("claude-rc")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert (box.tmp / "claude-args").read_text().startswith("remote-control\n")
+    # No opener here, so it says where to go instead.
+    assert "https://claude.ai/code" in r.stdout
+
+
+def test_claude_rc_without_claude_says_how_to_get_it(box):
+    box.configure()
+    (box.home / "terminalvalues").mkdir()
+    r = box.tv("claude-rc")
+    assert r.returncode == 2
+    assert "Claude Code isn't installed" in r.stderr and "https://" in r.stderr
+
+
+def test_claude_rc_needs_to_have_joined(box):
+    fake_claude(box, box.bin)
+    r = box.tv("claude-rc")
+    assert r.returncode == 2
+    assert "tv join" in r.stderr
+    assert not (box.tmp / "claude-args").exists()

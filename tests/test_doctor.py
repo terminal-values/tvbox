@@ -54,7 +54,7 @@ esac''')
     env_file.write_text(f"TVHOME_SYNCTHING_ID={TVHOME}\nTVHOME_HOST=tvhome.example.ts.net\n")
 
     def run(**fakes):
-        env = {**os.environ, "PATH": f"{bin_}:{os.environ['PATH']}", "HOME": str(home),
+        env = {**os.environ, "TV_EXTRA_PATH": "", "PATH": f"{bin_}:{os.environ['PATH']}", "HOME": str(home),
                "TVBOX_ENV": str(env_file), "TVBOX_ST": str(st), "TVBOX_INSIDE": str(inside),
                "PASSAGE_DIR": str(secrets), "TVBOX_STIGNORE": str(stignore), "TVBOX_STATE": str(tmp_path),
                **{f"FAKE_{k.upper()}": v for k, v in fakes.items()}}

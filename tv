@@ -42,6 +42,18 @@ detect_runtime() {
             if command -v "$r" >/dev/null 2>&1; then RT=$r; break; fi
         done
     fi
+    # Apps (the Claude app, say) can run tv with a bare PATH, without the
+    # places Apple's container, Docker, Podman and Homebrew put their
+    # commands. Only when nothing's found on the PATH itself are those
+    # added, at the end, so a runtime on the PATH always wins.
+    if [ -z "$RT" ] && [ -z "${TV_PATH_EXTENDED:-}" ]; then
+        TV_PATH_EXTENDED=1
+        for d in $(printf '%s' "${TV_EXTRA_PATH-/usr/local/bin:/opt/homebrew/bin:/opt/podman/bin}" | tr : ' '); do
+            case :$PATH: in *:"$d":*) ;; *) [ -d "$d" ] && PATH=$PATH:$d ;; esac
+        done
+        export PATH
+        detect_runtime
+    fi
 }
 
 find_runtime() {
@@ -1117,6 +1129,30 @@ replace_box() {
     create_box || die 1 "The new box wouldn't start (see above). Your folder, key and secrets are as they were."
 }
 
+# tv claude-rc [FLAGS]: Claude Code's Remote Control, serving the TVhome
+# Folder, so a member can work in it from claude.ai/code or the Claude app
+# on their phone. Sessions share the folder itself (--spawn same-dir): a
+# worktree would have the code but none of TV's documents. The session's
+# own link is printed by claude; claude.ai/code lists it too, so that's
+# what's opened. Claude asks, the first time, whether to trust the folder
+# and turn Remote Control on, so the first run needs a terminal. FLAGS go
+# on to claude remote-control (--permission-mode plan, say).
+cmd_claude_rc() {
+    need_config
+    claude=$(command -v claude 2>/dev/null) ||
+        claude=$HOME/.local/bin/claude
+    [ -x "$claude" ] || die 2 "Claude Code isn't installed on this computer. To install it, see
+https://code.claude.com/docs/en/setup (you'll need a paid Claude plan)."
+    cd "$FOLDER" || die 1 "Couldn't go into the TVhome Folder, $FOLDER."
+    say "Remote Control for your TVhome Folder. Open the link Claude prints below,"
+    say "or find this computer's session at https://claude.ai/code or in the Claude"
+    say "app on your phone. It runs until you close this window or press Ctrl-C."
+    if [ "$(uname)" = Darwin ] && command -v open >/dev/null 2>&1; then open https://claude.ai/code
+    elif command -v xdg-open >/dev/null 2>&1; then xdg-open https://claude.ai/code >/dev/null 2>&1
+    fi
+    exec "$claude" remote-control --spawn same-dir --name "TVhome Folder" "$@"
+}
+
 usage() {
     cat <<'EOF'
 tv: Terminal Values' box.
@@ -1130,6 +1166,7 @@ tv: Terminal Values' box.
   tv changes       what tv catch-up would bring in, as JSON
   tv push          send your code commits and the secrets to TVhome
   tv phone         pair your phone with TVhome, by QR code
+  tv claude-rc     work in the folder from claude.ai/code or your phone
   tv git ...       git, in the TVhome Folder, in the box
   tv passage ...   TV's shared secrets
   tv pages [PAGE]  open TVhome Pages (or one, by its path in www/)
@@ -1170,6 +1207,7 @@ case $cmd in
     run) need_box; in_box "$@" ;;
     shell) need_box; in_box bash -l ;;
     pages) cmd_pages "$@" ;;
+    claude-rc) cmd_claude_rc "$@" ;;
     link) cmd_link "$@" ;;
     open) cmd_open "$@" ;;
     decode-link) decode_link "${1:-}" && printf '%s\t%s\n' "$rel" "$isdir" || { echo "$why" >&2; exit 2; } ;;
@@ -1184,7 +1222,7 @@ case $cmd in
     help|-h|--help) usage ;;
     *)  # A near miss gets a suggestion: tv catchup, tv catch_up, tv Status.
         near=$(printf '%s' "$cmd" | tr 'A-Z_' 'a-z-')
-        for c in join start stop status stats identity doctor catch-up changes push phone git passage run shell pages link open \
+        for c in join start stop status stats identity doctor catch-up changes push phone claude-rc git passage run shell pages link open \
                  import-key export-key folder move update uninstall; do
             [ "$(printf '%s' "$c" | tr -d -)" = "$(printf '%s' "$near" | tr -d -)" ] && near=$c && break
             c=
